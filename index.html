@@ -407,6 +407,23 @@
   .parl-r b { font: 800 1.1rem var(--font-display); } .parl-r small { font: 11px var(--font-mono); color: var(--card-dim); white-space: nowrap; }
   .rec-row, .cal-row { grid-template-columns: minmax(0, 1fr) 60px 70px 70px; }
   @media (max-width: 520px) { .srch { width: 100%; } .srch input { width: 100%; } .parl-r { grid-template-columns: minmax(0, 1fr) auto auto; } .parl-r small { display: none; } .rec-row, .cal-row { grid-template-columns: minmax(0, 1fr) 44px 56px 56px; } }
+  .pb { grid-column: 1 / -1; display: grid; gap: 10px; }
+  .pb-top { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pb-top input, .pb-top select { font: 14px var(--font-body); background: var(--card-bg); color: var(--card-ink); border: 1px solid var(--card-edge); border-radius: 999px; padding: 8px 14px; min-width: 0; }
+  .pb-top input { flex: 1 1 220px; } .pb-top select { flex: 0 1 220px; }
+  .pb-top input:focus-visible, .pb-top select:focus-visible { outline: 2px solid var(--flag); outline-offset: 0; }
+  .pb-mk { justify-self: start; display: flex; flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; } .pb-mk button { white-space: nowrap; flex: 0 0 auto; }
+  .pb-out { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); align-items: start; }
+  .pb-h { grid-column: 1 / -1; font: 11px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--chalk-dim); }
+  .pb-card { background: var(--card-bg); color: var(--card-ink); border: 1px solid var(--card-edge); border-left: 2px solid var(--flag); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; }
+  .pb-out > .pb-card:only-of-type { grid-column: 1 / -1; }
+  .pb-card .srch-h { margin-bottom: 4px; } .pb-card .srch-h small { color: var(--card-dim); font: 11px var(--font-mono); margin-left: auto; }
+  .pb-row { display: grid; grid-template-columns: minmax(0, 1fr) 52px 40px 26px; gap: 8px; align-items: center; padding: 4px 0; border-top: 1px solid color-mix(in srgb, var(--card-edge) 60%, transparent); font-size: 13.5px; }
+  .pb-row:first-of-type { border-top: 0; }
+  .pb-bet { min-width: 0; } .pb-bet small { display: block; color: var(--card-dim); font: 11px var(--font-mono); }
+  .pb-our { font: 600 10px var(--font-mono); font-style: normal; text-transform: uppercase; letter-spacing: .05em; color: var(--flag); margin-left: 6px; }
+  .pb-odds, .pb-pc { font: 12.5px var(--font-mono); text-align: right; font-variant-numeric: tabular-nums; color: var(--card-dim); }
+  .pb-pc { color: var(--card-ink); font-weight: 600; } .pb-pc.good { color: var(--win); }
   .tab-groups { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 10px; }
   .tab-group { display: grid; gap: 5px; min-width: 0; }
   .tg-label { font: 600 10.5px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--chalk-dim); text-shadow: var(--head-shadow); }
@@ -497,6 +514,7 @@
   /* tabs: picks group = orange, model group = gold */
   .hub.hub:not([data-tab="current"]) .games-sec { --flag: var(--tab-accent); }
   .hub.hub[data-tab="past"], .hub.hub[data-tab="odds"], .hub.hub[data-tab="record"] { --tab-accent: #ff7a1a; }
+  .hub.hub[data-tab="parlay"] { --tab-accent: #ff7a1a; }
   .hub.hub[data-tab="td"], .hub.hub[data-tab="ml"], .hub.hub[data-tab="recyd"], .hub.hub[data-tab="rushyd"], .hub.hub[data-tab="passyd"] { --tab-accent: #f2b705; }
   .hub.hub .yd-line.o { color: var(--gold); } .hub.hub .yd-line.u { color: #e6e6e4; }
   .hub.hub .chip.good { color: var(--gold); } .hub.hub .chip.bad { color: var(--loss); }
@@ -578,6 +596,7 @@
         <div class="tab-group"><span class="tg-label">Picks</span>
           <div class="tabs" role="tablist" aria-label="Picks">
             <button type="button" role="tab" id="tab-current" aria-selected="true" aria-controls="games">This week</button>
+            <button type="button" role="tab" id="tab-parlay" aria-selected="false" aria-controls="games">Build a parlay</button>
             <button type="button" role="tab" id="tab-past" aria-selected="false" aria-controls="games">Past weeks</button>
             <button type="button" role="tab" id="tab-odds" aria-selected="false" aria-controls="games">Odds moves</button>
             <button type="button" role="tab" id="tab-record" aria-selected="false" aria-controls="games">Record</button>
@@ -723,7 +742,20 @@
   const STATUS_ORDER = { live: 0, upcoming: 1, final: 2 };
 
   let games = [], picks = [], slips = [], firstPicks = true, DB = null, meta = {};
-  const legs = [];                       // pick ids in the slip builder
+  const legs = [];                       // pick ids (or custom line ids from the parlay tab) in the slip builder
+  let MENUS = {};                        // per-game FanDuel lines + stat correlations for the parlay tab (menus collection)
+  const custom = new Map();              // custom legs added from the parlay tab, by id
+  const legOf = (id) => picks.find((x) => x.id === id) || custom.get(id);
+  const MKLAB = { rec: 'receptions', recyd: 'rec yds', rushyd: 'rush yds', passyd: 'pass yds', passtd: 'pass TDs', ATD: 'anytime TD' };
+  const MKREV = { 'receptions': 'rec', 'rec yds': 'recyd', 'rush yds': 'rushyd', 'pass yds': 'passyd', 'pass tds': 'passtd' };
+  // which simulated stat a leg rides on, and whether it is an over (+1) or under (-1)
+  function ckOf(p) {
+    if (p.ck) return p.ck;
+    const b = String(p.bet || '').toLowerCase();
+    if (b.includes('anytime td')) return { key: p.player + '|ATD', sign: 1 };
+    const m = b.match(/(under\s+)?[\d.]+\+?\s+(receptions|rec yds|rush yds|pass yds|pass tds)/);
+    return m ? { key: p.player + '|' + MKREV[m[2]], sign: m[1] ? -1 : 1 } : null;
+  }
   let prevSeen = null;
   try { prevSeen = localStorage.getItem('hub-seen-at'); } catch (_) {}
   const implied = (am) => { am = Number(am); if (!am) return null; return am < 0 ? -am / (-am + 100) : 100 / (am + 100); };
@@ -755,6 +787,14 @@
       const g = games.find((x) => x.id === a.game_id), key = [a.id, b.id].sort().join('|');
       const r = g && g.corr ? g.corr[key] : undefined;
       if (typeof r === 'number') { usedCorr = true; return Math.max(-0.95, Math.min(0.95, r)); }
+      const ca = ckOf(a), cb = ckOf(b);
+      const pc = g && MENUS[g.id] && MENUS[g.id].pcorr;
+      if (ca && cb && pc) {
+        usedCorr = true;
+        if (ca.key === cb.key) return 0.9 * ca.sign * cb.sign;            // two lines on the same stat
+        const v = pc[[ca.key, cb.key].sort().join('~')];
+        return typeof v === 'number' ? Math.max(-0.95, Math.min(0.95, v * ca.sign * cb.sign)) : 0;
+      }
       sameGameNoCorr = true; return 0;
     }));
     let L = null;
@@ -1047,7 +1087,7 @@
   });
   const seen = new Set(), fresh = new Set();
   let tab = 'current';
-  const TABS = [['tab-current', 'current'], ['tab-past', 'past'], ['tab-odds', 'odds'], ['tab-record', 'record'], ['tab-td', 'td'], ['tab-ml', 'ml'], ['tab-recyd', 'recyd'], ['tab-rushyd', 'rushyd'], ['tab-passyd', 'passyd']];
+  const TABS = [['tab-current', 'current'], ['tab-parlay', 'parlay'], ['tab-past', 'past'], ['tab-odds', 'odds'], ['tab-record', 'record'], ['tab-td', 'td'], ['tab-ml', 'ml'], ['tab-recyd', 'recyd'], ['tab-rushyd', 'rushyd'], ['tab-passyd', 'passyd']];
   TABS.forEach(([id, v]) => {
     const b = $(id); if (!b) return;
     b.addEventListener('click', () => { tab = v; TABS.forEach(([i2, v2]) => $(i2).setAttribute('aria-selected', String(v === v2))); render(); });
@@ -1114,7 +1154,8 @@
     renderBest(wk && wk.week);
     const curWeek = wk && wk.week;
     $('hub').dataset.tab = tab;
-    $('sync').textContent = tab === 'odds' ? 'FanDuel price when I posted each pick vs. the price at kickoff.' : tab === 'record' ? 'Every settled pick, losses included, and whether the model\'s hit rates hold up.' : tab === 'td' ? 'Our touchdown picks, ranked by the model\'s chance they score.' : tab === 'ml' ? 'Win, cover and over/under chances for every game, from our game sim.' : tab === 'recyd' ? 'Over and under hit rates on FanDuel\'s receiving yards lines.' : tab === 'rushyd' ? 'Over and under hit rates on FanDuel\'s rushing yards lines.' : tab === 'passyd' ? 'Over and under hit rates on FanDuel\'s passing yards lines.' : (DB ? 'Live · new picks pop in automatically' : 'Connecting to the picks board…');
+    $('sync').textContent = tab === 'parlay' ? 'Search any player on this week\'s slate and add their lines to a parlay.' : tab === 'odds' ? 'FanDuel price when I posted each pick vs. the price at kickoff.' : tab === 'record' ? 'Every settled pick, losses included, and whether the model\'s hit rates hold up.' : tab === 'td' ? 'Our touchdown picks, ranked by the model\'s chance they score.' : tab === 'ml' ? 'Win, cover and over/under chances for every game, from our game sim.' : tab === 'recyd' ? 'Over and under hit rates on FanDuel\'s receiving yards lines.' : tab === 'rushyd' ? 'Over and under hit rates on FanDuel\'s rushing yards lines.' : tab === 'passyd' ? 'Over and under hit rates on FanDuel\'s passing yards lines.' : (DB ? 'Live · new picks pop in automatically' : 'Connecting to the picks board…');
+    if (tab === 'parlay') { renderParlay($('games'), curWeek); return; }
     if (tab === 'odds') { renderOdds($('games')); return; }
     if (tab === 'record') { renderRecord($('games')); return; }
     if (tab === 'td') { renderTD($('games'), curWeek); return; }
@@ -1559,6 +1600,103 @@
     const nt = document.createElement('div'); nt.className = 'b-note'; nt.textContent = 'Small samples swing a lot. The model check gets meaningful after a few hundred settled picks.'; wrap.appendChild(nt);
     box.appendChild(wrap);
   }
+  // ---- parlay tab: search every player's FanDuel lines and add them to the slip ----
+  let PB = null, pbGame = 'all', pbMk = 'all';
+  function renderParlay(box, curWeek) {
+    if (!PB) {
+      PB = document.createElement('div'); PB.className = 'pb';
+      const top = document.createElement('div'); top.className = 'pb-top';
+      const q = document.createElement('input'); q.type = 'search'; q.id = 'pb-q'; q.placeholder = 'Search a player'; q.autocomplete = 'off'; q.setAttribute('aria-label', 'Search a player for the parlay');
+      const sel = document.createElement('select'); sel.id = 'pb-g'; sel.setAttribute('aria-label', 'Game');
+      const chips = document.createElement('div'); chips.className = 'tabs pb-mk';
+      [['all', 'All'], ['ATD', 'TDs'], ['rec', 'Catches'], ['recyd', 'Rec yds'], ['rushyd', 'Rush yds'], ['passyd', 'Pass yds'], ['passtd', 'Pass TDs']].forEach(([v, l]) => {
+        const b = document.createElement('button'); b.type = 'button'; b.textContent = l; b.dataset.mk = v; b.setAttribute('aria-pressed', String(pbMk === v));
+        b.addEventListener('click', () => { pbMk = v; chips.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.mk === v))); refreshPB(); });
+        chips.appendChild(b);
+      });
+      q.addEventListener('input', () => refreshPB());
+      sel.addEventListener('change', () => { pbGame = sel.value; refreshPB(); });
+      top.append(q, sel);
+      const out = document.createElement('div'); out.className = 'pb-out'; out.id = 'pb-out';
+      const nt = document.createElement('div'); nt.className = 'b-note'; nt.textContent = 'Model % = share of simulated games the line hits. Green = the model beats FanDuel\'s price on that leg. Your parlay opens at the bottom of the screen; enter FanDuel\'s same-game price there to see the edge.';
+      PB.append(top, chips, out, nt);
+    }
+    PB.dataset.week = curWeek || '';
+    if (box.firstChild !== PB || box.children.length !== 1) box.replaceChildren(PB);
+    refreshPB();
+  }
+  function refreshPB() {
+    if (!PB) return;
+    const curWeek = PB.dataset.week, q = (PB.querySelector('#pb-q').value || '').trim().toLowerCase();
+    const gs = games.filter((g) => g.week === curWeek && MENUS[g.id] && g.status !== 'final').sort((a, b) => String(a.kickoff).localeCompare(String(b.kickoff)));
+    const sel = PB.querySelector('#pb-g'), want = ['all', ...gs.map((g) => g.id)].join(',');
+    if (sel.dataset.k !== want) {
+      sel.replaceChildren(); sel.dataset.k = want;
+      [['all', 'All games'], ...gs.map((g) => [g.id, g.away + ' @ ' + g.home + (g.label ? ' · ' + g.label : '')])].forEach(([v, l]) => { const o = document.createElement('option'); o.value = v; o.textContent = l; sel.appendChild(o); });
+      if (!gs.some((g) => g.id === pbGame)) pbGame = 'all';
+      sel.value = pbGame;
+    }
+    const out = PB.querySelector('#pb-out'); out.replaceChildren();
+    if (!gs.length) { const e = document.createElement('div'); e.className = 'slips-empty'; e.textContent = 'Lines show up here once a game\'s props post and the sim runs.'; out.appendChild(e); return; }
+    const rows = [];
+    gs.forEach((g) => { if (pbGame !== 'all' && g.id !== pbGame) return; MENUS[g.id].menu.forEach((m) => {
+      const [player, team, mk0, line, odds, model] = m, under = mk0.endsWith('_u'), mk = under ? mk0.slice(0, -2) : mk0;
+      if (pbMk !== 'all' && mk !== pbMk) return;
+      if (q.length >= 2 && !player.toLowerCase().includes(q)) return;
+      rows.push({ g, player, team, mk, under, line, odds, model });
+    }); });
+    const byP = new Map();
+    rows.forEach((r) => { const k = r.g.id + '|' + r.player; if (!byP.has(k)) byP.set(k, { g: r.g, player: r.player, team: r.team, lines: [] }); byP.get(k).lines.push(r); });
+    let list = [...byP.values()];
+    const best = (pl) => Math.max(...pl.lines.map((r) => r.model));
+    if (q.length < 2 && pbGame === 'all') {
+      // no search yet: the strongest edges across the slate
+      const top = rows.filter((r) => r.odds != null).map((r) => ({ ...r, edge: r.model - implied(r.odds) })).filter((r) => r.edge <= 0.12).sort((a, b) => b.edge - a.edge).filter((r, i, arr) => arr.findIndex((x) => x.player === r.player) === i).slice(0, 12);   // one line per player; edges over 12 pts are usually a sim miss, so they are left out here
+      const h = document.createElement('div'); h.className = 'pb-h'; h.textContent = 'Biggest model edges this week · search a name for every line';
+      out.appendChild(h);
+      const card = document.createElement('div'); card.className = 'pb-card';
+      top.forEach((r) => card.appendChild(pbRow(r, true)));
+      out.appendChild(card); return;
+    }
+    list.sort((a, b) => best(b) - best(a));
+    if (!list.length) { const e = document.createElement('div'); e.className = 'srch-none'; e.textContent = 'No lines match.'; out.appendChild(e); return; }
+    list.slice(0, q.length >= 2 ? 12 : 40).forEach((pl) => {
+      const card = document.createElement('div'); card.className = 'pb-card';
+      const h = document.createElement('div'); h.className = 'srch-h'; if (pl.team && TEAMS[pl.team]) h.appendChild(badge(pl.team, true));
+      const b = document.createElement('b'); b.textContent = pl.player; const sm = document.createElement('small'); sm.textContent = pl.g.away + ' @ ' + pl.g.home;
+      h.append(b, sm); card.appendChild(h);
+      const order = ['ATD', 'passtd', 'passyd', 'rushyd', 'rec', 'recyd'];
+      pl.lines.sort((a, b) => order.indexOf(a.mk) - order.indexOf(b.mk) || a.under - b.under || a.line - b.line).forEach((r) => card.appendChild(pbRow(r, false)));
+      out.appendChild(card);
+    });
+  }
+  function pbBet(r) { return r.mk === 'ATD' ? 'anytime TD' : r.under ? 'Under ' + r.line + ' ' + MKLAB[r.mk] : r.line + '+ ' + MKLAB[r.mk]; }
+  function pbRow(r, withName) {
+    const bet = pbBet(r);
+    const pk = picks.find((p) => p.game_id === r.g.id && p.player === r.player && p.bet === bet && (!p.status || p.status === 'pending'));
+    const id = pk ? pk.id : 'c~' + r.g.id + '~' + r.player + '~' + (r.under ? r.mk + '_u' : r.mk) + '~' + r.line;
+    const row = document.createElement('div'); row.className = 'pb-row';
+    const t = document.createElement('span'); t.className = 'pb-bet';
+    if (withName) { const b = document.createElement('b'); b.textContent = r.player + ' '; t.appendChild(b); }
+    t.appendChild(document.createTextNode(bet));
+    if (pk) { const s = document.createElement('i'); s.className = 'pb-our'; s.textContent = 'Our pick'; t.appendChild(s); }
+    if (withName) { const s = document.createElement('small'); s.textContent = r.g.away + ' @ ' + r.g.home; t.appendChild(s); }
+    const o = document.createElement('span'); o.className = 'pb-odds'; o.textContent = r.odds != null ? fmtOdds(r.odds) : '—';
+    const m = document.createElement('span'); m.className = 'pb-pc' + (r.odds != null ? (r.model > implied(r.odds) + 0.005 ? ' good' : '') : ''); m.textContent = Math.round(r.model * 100) + '%';
+    const add = document.createElement('button'); add.type = 'button'; add.className = 'add-leg';
+    const on = legs.includes(id); add.setAttribute('aria-pressed', String(on)); add.textContent = on ? '✓' : '+';
+    add.setAttribute('aria-label', (on ? 'Remove ' : 'Add ') + r.player + ' ' + bet + (on ? ' from' : ' to') + ' parlay');
+    add.addEventListener('click', () => {
+      const i = legs.indexOf(id);
+      if (i >= 0) { legs.splice(i, 1); custom.delete(id); }
+      else {
+        if (!pk) custom.set(id, { id, custom: true, game_id: r.g.id, player: r.player, team: r.team, bet, odds: r.odds, model_pct: r.model, status: 'pending', ck: { key: r.player + '|' + r.mk, sign: r.under ? -1 : 1 } });
+        legs.push(id);
+      }
+      render(); renderBuilder();
+    });
+    row.append(t, o, m, add); return row;
+  }
   // ---- player search ----
   function runSearch() {
     const q = ($('srch').value || '').trim().toLowerCase(), out = $('srch-out');
@@ -1689,9 +1827,9 @@
     return g && g.week;
   }
   function renderBuilder() {
-    for (let i = legs.length - 1; i >= 0; i--) { const p = picks.find((x) => x.id === legs[i]); if (!p || (p.status && p.status !== 'pending')) legs.splice(i, 1); }
+    for (let i = legs.length - 1; i >= 0; i--) { const p = legOf(legs[i]); if (!p || (p.status && p.status !== 'pending')) legs.splice(i, 1); }
     const el = $('builder'); el.hidden = !legs.length; padForBuilder(); if (!legs.length) return;
-    const ls = legs.map((id) => picks.find((x) => x.id === id));
+    const ls = legs.map(legOf);
     const ul = $('b-legs'); ul.replaceChildren();
     ls.forEach((p) => {
       const g = games.find((x) => x.id === p.game_id) || {};
@@ -1699,7 +1837,7 @@
       const t = document.createElement('span'); t.textContent = p.player + ' ' + p.bet;
       const r = document.createElement('span'); r.className = 'mono'; r.textContent = (g.away ? g.away + '@' + g.home + ' · ' : '') + (p.odds != null ? fmtOdds(p.odds) + ' · ' : '') + pct(legProb(p));
       const x = document.createElement('button'); x.type = 'button'; x.textContent = '×'; x.setAttribute('aria-label', 'Remove ' + p.player);
-      x.addEventListener('click', () => { legs.splice(legs.indexOf(p.id), 1); render(); renderBuilder(); });
+      x.addEventListener('click', () => { legs.splice(legs.indexOf(p.id), 1); custom.delete(p.id); render(); renderBuilder(); });
       const right = document.createElement('span'); right.append(r, x); right.style.display = 'flex'; right.style.gap = '6px'; right.style.alignItems = 'center';
       li.append(t, right); ul.appendChild(li);
     });
@@ -1707,7 +1845,7 @@
   }
   let jpCache = { key: '', res: null };
   function updateBuilderStats() {
-    const ls = legs.map((id) => picks.find((x) => x.id === id)).filter(Boolean);
+    const ls = legs.map(legOf).filter(Boolean);
     const key = ls.map((p) => p.id + ':' + legProb(p)).join(',');
     if (jpCache.key !== key) jpCache = { key, res: jointProb(ls) };
     const jp = jpCache.res, fdOdds = parseAm($('b-odds').value);
@@ -1736,9 +1874,9 @@
   $('b-min').addEventListener('click', () => { const el = $('builder'), m = el.classList.toggle('min'); $('b-min').textContent = m ? 'Show' : 'Hide'; $('b-min').setAttribute('aria-expanded', String(!m)); updateBuilderStats(); padForBuilder(); });
   $('b-odds').addEventListener('input', updateBuilderStats);
   $('b-stake').addEventListener('input', updateBuilderStats);
-  $('b-clear').addEventListener('click', () => { legs.length = 0; render(); renderBuilder(); });
+  $('b-clear').addEventListener('click', () => { legs.length = 0; custom.clear(); render(); renderBuilder(); });
   $('b-save').addEventListener('click', async () => {
-    const ls = legs.map((id) => picks.find((x) => x.id === id)).filter(Boolean);
+    const ls = legs.map(legOf).filter(Boolean);
     const naive = ls.every((p) => p.odds != null) ? ls.reduce((m, p) => m * dec(p.odds), 1) : null;
     const odds = parseAm($('b-odds').value) || (naive ? (naive >= 2 ? Math.round((naive - 1) * 100) : -Math.round(100 / (naive - 1))) : null);
     const stake = Math.round(Number($('b-stake').value) * 100) / 100;
@@ -1747,8 +1885,8 @@
     const jp = jpCache.res;
     $('b-save').disabled = true; $('b-msg').textContent = 'Saving…';
     try {
-      await DB.collection('slips').add({ created: new Date().toISOString(), week: g0.week || curWeekName() || '', legs: ls.map((p) => p.id), odds, stake, model_pct: jp ? Math.round(jp.p * 1000) / 1000 : null, status_override: 'auto' });
-      legs.length = 0; $('b-odds').value = ''; $('b-stake').value = ''; render(); renderBuilder();
+      await DB.collection('slips').add({ created: new Date().toISOString(), week: g0.week || curWeekName() || '', legs: ls.map((p) => p.id), custom_legs: ls.filter((p) => p.custom).map((p) => ({ id: p.id, game_id: p.game_id, player: p.player, bet: p.bet, odds: p.odds ?? null, model_pct: p.model_pct })), odds, stake, model_pct: jp ? Math.round(jp.p * 1000) / 1000 : null, status_override: 'auto' });
+      legs.length = 0; custom.clear(); $('b-odds').value = ''; $('b-stake').value = ''; render(); renderBuilder();
     } catch (e) { $('b-save').disabled = false; $('b-msg').textContent = 'Only the owner can save slips.'; }
   });
   function renderOwner() {
@@ -1762,7 +1900,7 @@
     const row = (sl) => {
       const st = slipStatus(sl), li = document.createElement('li'); li.className = 'orow ' + st;
       const dot = document.createElement('span'); dot.className = 'dot ' + (st === 'void' ? 'pending' : st);
-      const legsTxt = (sl.legs || []).map((id) => { const p = picks.find((x) => x.id === id); return p ? p.player + ' ' + p.bet : '—'; }).join('  +  ');
+      const legsTxt = (sl.legs || []).map((id) => { const p = picks.find((x) => x.id === id) || (sl.custom_legs || []).find((x) => x.id === id); return p ? p.player + ' ' + p.bet : '—'; }).join('  +  ');
       const t = document.createElement('span'); t.className = 'orow-legs'; t.textContent = legsTxt; t.title = legsTxt;
       const o = document.createElement('span'); o.className = 'orow-odds'; o.textContent = ((sl.legs || []).length > 1 ? (sl.legs || []).length + '-leg ' : '') + fmtOdds(sl.odds);
       const r = document.createElement('span'); r.className = 'orow-res ' + st;
@@ -1812,6 +1950,7 @@
     if (!db) { $('sync').textContent = 'Sign in to see live picks.'; return; }
     DB = db;
     db.collection('meta').onSnapshot((snap) => { meta = {}; snap.docs.forEach((d) => { meta[d.id] = d.data(); }); render(); }, () => {});
+    db.collection('menus').onSnapshot((snap) => { MENUS = {}; snap.docs.forEach((d) => { MENUS[d.id] = d.data(); }); if (tab === 'parlay') render(); }, () => {});
     db.collection('slips').onSnapshot((snap) => { slips = snap.docs.map((d) => ({ id: d.id, ...d.data() })); renderOwner(); }, () => {});
     $('sync').textContent = 'Live · new picks pop in automatically';
     db.collection('games').onSnapshot((snap) => {
