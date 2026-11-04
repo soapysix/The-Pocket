@@ -534,6 +534,30 @@
   .hub.hub .pl-tile b { font-size: 1.45rem; }
   .hub.hub .tdb { padding-block: 7px; }
   .brand-h { margin: 2px 0 0; line-height: 0; } .brand-h .brand { width: clamp(170px, 34vw, 260px); height: auto; display: block; }
+
+  /* ---- tidy layout: picks first ---- */
+  .hub.hub .wrap { gap: 14px; }
+  .hub.hub header.top { align-items: center; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+  .hub.hub header.top .eyebrow { margin-bottom: 4px; }
+  .navbar { position: sticky; top: 0; z-index: 15; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 18px; padding: 10px 0 10px; margin: 0 0 6px; background: linear-gradient(180deg, #0a0a0b 82%, rgba(10,10,11,0)); }
+  .navbar .tab-groups { margin-top: 0; }
+  .navbar .srch input { width: 210px; }
+  .games-sec .best { margin: 6px 0 2px; }
+  #sync { font-size: 12px; }
+  .foot { margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--line); display: grid; gap: 12px; opacity: .85; }
+  .foot .flow { border: 0; }
+  .foot-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .foot .slate-pick button { font-size: 11px; padding: 4px 9px; }
+  @media (max-width: 520px) { .navbar { padding-top: 8px; } .navbar .srch, .navbar .srch input { width: 100%; } .hub.hub header.top { gap: 8px; } }
+
+  .brand-h .brand { width: clamp(150px, 26vw, 200px) !important; }
+  #sync { display: none; }
+  @media (max-width: 520px) {
+    .navbar { position: static; background: none; }
+    .hub.hub .potw-title { font-size: 1.1rem; line-height: 1.1; }
+    .potw-top { display: grid !important; grid-template-columns: 40px minmax(0,1fr); gap: 10px; }
+    .potw-top > .pick-side { grid-column: 2; margin-left: 0; text-align: left; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+  }
 </style>
 
 <div class="hub" id="hub">
@@ -547,41 +571,16 @@
       <div class="tally" aria-label="Pick results">
         <span class="pill rec">Record <b class="rw" id="t-won">0</b>–<b class="rl" id="t-lost">0</b> · <b class="rpct" id="t-pct">–</b> win<span class="rp"> · <b id="t-pend">0</b> pending</span></span>
         <span class="pill cd" id="countdown" hidden></span>
-        <div class="slate-pick" role="group" aria-label="Background">
-          <button type="button" data-slate="auto" aria-pressed="true">Auto</button>
-          <button type="button" data-slate="tnf" aria-pressed="false">TNF</button>
-          <button type="button" data-slate="sunday" aria-pressed="false">Sunday</button>
-          <button type="button" data-slate="snf" aria-pressed="false">SNF</button>
-          <button type="button" data-slate="mnf" aria-pressed="false">MNF</button>
-        </div>
-      </div>
+              </div>
     </header>
 
 
-    <div class="flow" aria-label="Teams on this week's slate">
-      <div class="flow-track" id="flow-a"></div>
-    </div>
-
-    <section class="best" aria-labelledby="best-h">
-      <h2 id="best-h" class="sr-only">Pick of the week</h2>
-      <div class="best-row" id="best-row"></div>
-    </section>
-
-    <section class="owner" id="owner" hidden aria-labelledby="owner-h">
-      <div class="owner-card">
-        <div class="owner-head"><span class="owner-tag" id="owner-h">Owner's slips</span><span class="owner-rec" id="owner-rec"></span></div>
-        <ul class="owner-list" id="owner-list"></ul>
-        <details class="owner-more" id="owner-more" hidden><summary>All owner slips</summary><ul class="owner-list" id="owner-all"></ul></details>
-      </div>
-    </section>
-
+    
+    
+    
     <section class="games-sec">
-      <div class="section-head">
-        <h2>Games &amp; picks</h2>
-        <label class="srch"><span class="sr-only">Search a player</span><input id="srch" type="search" placeholder="Search a player" autocomplete="off"></label>
-      </div>
-      <div id="srch-out" class="srch-out" hidden></div>
-      <div class="tab-groups">
+      <nav class="navbar" aria-label="Sections">
+        <div class="tab-groups">
         <div class="tab-group"><span class="tg-label">Picks</span>
           <div class="tabs" role="tablist" aria-label="Picks">
             <button type="button" role="tab" id="tab-current" aria-selected="true" aria-controls="games">This week</button>
@@ -600,9 +599,38 @@
           </div>
         </div>
       </div>
-      <p class="muted" id="sync" style="margin:6px 0 0">Connecting to the picks board…</p>
-      <div class="games" id="games" style="margin-top:14px"></div>
+        <label class="srch"><span class="sr-only">Search a player</span><input id="srch" type="search" placeholder="Search a player" autocomplete="off"></label>
+      </nav>
+      <div id="srch-out" class="srch-out" hidden></div>
+      <section class="best" aria-labelledby="best-h">
+      <h2 id="best-h" class="sr-only">Pick of the week</h2>
+      <div class="best-row" id="best-row"></div>
     </section>
+      <p class="muted" id="sync" style="margin:6px 0 0">Connecting to the picks board…</p>
+      <div class="games" id="games" style="margin-top:12px"></div>
+    </section>
+
+    <section class="owner" id="owner" hidden aria-labelledby="owner-h">
+      <div class="owner-card">
+        <div class="owner-head"><span class="owner-tag" id="owner-h">Owner's slips</span><span class="owner-rec" id="owner-rec"></span></div>
+        <ul class="owner-list" id="owner-list"></ul>
+        <details class="owner-more" id="owner-more" hidden><summary>All owner slips</summary><ul class="owner-list" id="owner-all"></ul></details>
+      </div>
+    </section>
+
+    <footer class="foot">
+      <div class="flow" aria-label="Teams on this week's slate">
+      <div class="flow-track" id="flow-a"></div>
+    </div>
+      <div class="foot-row"><span class="tg-label">Theme</span><div class="slate-pick" role="group" aria-label="Background">
+          <button type="button" data-slate="auto" aria-pressed="true">Auto</button>
+          <button type="button" data-slate="tnf" aria-pressed="false">TNF</button>
+          <button type="button" data-slate="sunday" aria-pressed="false">Sunday</button>
+          <button type="button" data-slate="snf" aria-pressed="false">SNF</button>
+          <button type="button" data-slate="mnf" aria-pressed="false">MNF</button>
+        </div>
+      </div>
+    </footer>
   </div>
   <aside class="builder" id="builder" hidden aria-label="Slip builder">
     <div class="b-head"><strong id="b-title">Slip</strong><div><button type="button" class="b-btn" id="b-min" aria-expanded="true">Hide</button><button type="button" class="b-btn" id="b-clear">Clear</button></div></div>
