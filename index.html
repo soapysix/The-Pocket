@@ -1,0 +1,1795 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><script>
+// Standalone data layer: reads data.json (refreshed every 60s) in place of the Claude-hosted database.
+(function(){
+  var SRC = window.HUB_DATA || 'data.json';
+  var cache = null, subs = [];
+  function pull(){ return fetch(SRC + '?t=' + Date.now(), {cache:'no-store'}).then(function(r){ return r.json(); }).then(function(j){ cache = j; subs.forEach(function(s){ s.cb({docs:(cache[s.c]||[]).map(function(x){ return {id:x.id, data:function(){ return x; }}; })}); }); }).catch(function(){}); }
+  var ro = function(){ return Promise.reject(new Error('read-only')); };
+  var db = { collection: function(c){ return {
+      onSnapshot: function(cb){ var s={c:c,cb:cb}; subs.push(s); if (cache) cb({docs:(cache[c]||[]).map(function(x){ return {id:x.id, data:function(){ return x; }}; })}); return function(){ subs = subs.filter(function(t){ return t!==s; }); }; },
+      add: ro, doc: function(){ return { update: ro, delete: ro, set: ro }; } }; } };
+  pull(); setInterval(pull, 60000);
+  window.claude = { use: function(n){ return Promise.resolve(n==='db' ? db : null); } };
+})();
+</script><title>The Pocket</title></head><body>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+  /* Slate-themed field: the background follows the next game on the board. TNF = night game under the lights, Sunday = daylight game day, MNF = broadcast scoreboard, other days = film-room turf. */
+  :root {
+    --turf: #0c2a1f;
+    --turf-deep: #071a13;
+    --chalk: #eef3ec;
+    --chalk-dim: #a9bdb2;
+    --line: rgba(238, 243, 236, 0.13);
+    --card: #0f3326;
+    --card-edge: rgba(238, 243, 236, 0.16);
+    --flag: #f2c230;
+    --win: #5fd38a;
+    --loss: #ff7a6b;
+    --pending: #8fb3ff;
+    --hub-bg: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), rgba(238,243,236,.13) calc(10% - 1px) 10%), radial-gradient(120% 80% at 50% 0%, #0c2a1f 0%, #071a13 70%);
+    --card-bg: linear-gradient(180deg, rgba(15,51,38,.96), rgba(10,38,28,.96));
+    --card-ink: #eef3ec;
+    --card-dim: #a9bdb2;
+    --pill-bg: rgba(7,26,19,.55);
+    --pill-ink: #eef3ec;
+    --divider: rgba(238,243,236,.07);
+    --head-shadow: none;
+    --font-display: "Saira Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+    --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { background: var(--turf-deep); margin: 0; }
+  html:has(.hub[data-slate="tnf"]), html:has(.hub[data-slate="tnf"]) body, html:has(.hub[data-slate="snf"]), html:has(.hub[data-slate="snf"]) body { background: #01020a; }
+  html:has(.hub[data-slate="mnf"]), html:has(.hub[data-slate="mnf"]) body { background: #010106; }
+  body { color: var(--chalk); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+  .hub { min-height: 100%; background: var(--hub-bg); transition: background .6s ease; }
+  .hub h1, .hub .eyebrow, .hub h2 { text-shadow: var(--head-shadow); }
+
+  /* Night games (TNF, SNF, MNF): black-blue star field, lit by the two teams' colors from either side */
+  .hub[data-slate="tnf"], .hub[data-slate="snf"], .hub[data-slate="mnf"] {
+    --hub-bg:
+      radial-gradient(70% 60% at -5% 8%, var(--glow-away, rgba(60,90,200,.45)), transparent 70%),
+      radial-gradient(70% 60% at 105% 8%, var(--glow-home, rgba(60,90,200,.45)), transparent 70%),
+      linear-gradient(180deg, #010208 0%, #050c22 50%, #0a1736 100%);
+    --card-bg: linear-gradient(180deg, rgba(10,18,40,.9), rgba(6,12,30,.92));
+    --card-edge: rgba(190,210,255,.18); --line: rgba(190,210,255,.14);
+    --card-dim: #a9b8d6; --chalk-dim: #b4c3df; --pill-bg: rgba(3,6,18,.65);
+    --flag: #ffd84d; --pending: #9ec2ff;
+    position: relative; isolation: isolate;
+  }
+  /* Thursday night: electric. Neon-cyan field grid glowing on the horizon, laser sweeps, rapid-fire fireworks */
+  .hub[data-slate="tnf"] {
+    --hub-bg:
+      radial-gradient(70% 55% at -5% 6%, var(--glow-away, rgba(60,90,200,.45)), transparent 70%),
+      radial-gradient(70% 55% at 105% 6%, var(--glow-home, rgba(60,90,200,.45)), transparent 70%),
+      radial-gradient(110% 40% at 50% 108%, rgba(40,220,255,.40), transparent 70%),
+      linear-gradient(180deg, #010208 0%, #04102a 50%, #062338 85%, #07303f 100%);
+    --flag: #3fe3ff; --pending: #ffd84d; --card-edge: rgba(80,225,255,.24); --line: rgba(80,225,255,.18);
+    --card-bg: linear-gradient(180deg, rgba(6,20,40,.9), rgba(4,12,28,.93));
+  }
+  /* Monday night: crimson horizon glow under the stars, red and amber broadcast accents */
+  .hub[data-slate="mnf"] {
+    --hub-bg:
+      radial-gradient(70% 60% at -5% 8%, var(--glow-away, rgba(60,90,200,.45)), transparent 70%),
+      radial-gradient(70% 60% at 105% 8%, var(--glow-home, rgba(60,90,200,.45)), transparent 70%),
+      radial-gradient(120% 45% at 50% 110%, rgba(214,32,46,.55), transparent 70%),
+      linear-gradient(180deg, #010106 0%, #080716 45%, #1d0710 82%, #2c0911 100%);
+    --card-bg: linear-gradient(180deg, rgba(22,10,16,.92), rgba(12,6,12,.94));
+    --card-edge: rgba(255,90,90,.24); --line: rgba(255,120,110,.18);
+    --flag: #ff4040; --pending: #ffb020; --card-dim: #c9b0b0; --chalk-dim: #d6bcbc; --pill-bg: rgba(14,4,8,.7);
+  }
+  /* Sunday night primetime: midnight sky over a glowing stadium bowl, crossing premiere searchlights, gold confetti */
+  .hub[data-slate="snf"] {
+    --hub-bg:
+      radial-gradient(70% 55% at -5% 6%, var(--glow-away, rgba(60,90,200,.45)), transparent 70%),
+      radial-gradient(70% 55% at 105% 6%, var(--glow-home, rgba(60,90,200,.45)), transparent 70%),
+      radial-gradient(90% 35% at 50% 104%, rgba(255,214,130,.38), transparent 70%),
+      linear-gradient(180deg, #01010a 0%, #090824 48%, #15103a 82%, #241a3e 100%);
+    --flag: #ffe08a; --pending: #b9b2ff; --card-bg: linear-gradient(180deg, rgba(18,14,48,.92), rgba(10,8,32,.94));
+  }
+  .sky { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; display: none; }
+  .hub[data-slate="tnf"] .sky, .hub[data-slate="snf"] .sky, .hub[data-slate="mnf"] .sky, .hub[data-slate="sunday"] .sky { display: block; }
+  /* Sunday game day: daylight, mowed grass stripes, crisp white yard lines, white cards */
+  .hub[data-slate="sunday"] {
+    --hub-bg: transparent;
+    --card-bg: rgba(255,255,255,.95); --card-ink: #10261a; --card-dim: #4f6a59; --card-edge: rgba(16,38,26,.14);
+    --chalk: #ffffff; --chalk-dim: #eaf6ea; --line: rgba(255,255,255,.55);
+    --flag: #ffe066; --pending: #2457c5; --win: #1f8a4c; --loss: #c8372d;
+    --pill-bg: rgba(255,255,255,.92); --pill-ink: #10261a; --divider: rgba(16,38,26,.08);
+    --head-shadow: 0 2px 12px rgba(10,40,90,.45);
+    --line: rgba(255,255,255,.35); position: relative; isolation: isolate;
+  }
+  .hub[data-slate="sunday"] .sky {
+    background:
+      radial-gradient(28% 34% at 86% 4%, rgba(255,246,214,.95), rgba(255,236,170,.35) 45%, transparent 75%),
+      linear-gradient(180deg, #1c5bb3 0%, #2f74cc 40%, #4f92dd 72%, #78ade6 100%);
+  }
+  html:has(.hub[data-slate="sunday"]), html:has(.hub[data-slate="sunday"]) body { background: #1c5bb3; }
+  .hub[data-slate="sunday"] .game .status.live { color: #a86e00; }
+  .hub[data-slate="sunday"] .eyebrow { color: #fff; }
+  .hub[data-slate="sunday"] .best-card .bc-rank { color: #b07d00; }
+  .slate-pick { display: inline-flex; border: 1px solid var(--card-edge); border-radius: 999px; overflow: hidden; background: var(--pill-bg); }
+  .slate-pick button { font: 500 12px var(--font-mono); color: var(--pill-ink); background: transparent; border: 0; padding: 6px 10px; cursor: pointer; }
+  .slate-pick button[aria-pressed="true"] { background: var(--flag); color: #101820; }
+  .slate-pick button:focus-visible { outline: 2px solid var(--flag); outline-offset: -2px; }
+  .wrap { max-width: 1180px; margin-inline: auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 56px; display: grid; gap: 28px; }
+
+  header.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
+  .eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--flag); }
+  h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(2.6rem, 7vw, 4.6rem); line-height: .92; margin: 6px 0 0; letter-spacing: .01em; text-transform: uppercase; text-wrap: balance; }
+  .tally { display: flex; gap: 10px; flex-wrap: wrap; }
+  .pill { font-family: var(--font-mono); font-size: 13px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--card-edge); background: var(--pill-bg); color: var(--pill-ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .pill b { font-weight: 500; color: var(--pill-ink); }
+  .pill.rec .rpct { color: var(--flag); } .hub[data-slate="sunday"] .pill.rec .rpct { color: #2457c5; }
+  .pill.rec .rw { color: var(--win); } .pill.rec .rl { color: var(--loss); } .pill.rec .rp b { color: var(--pending); }
+  .pill.w b { color: var(--win); } .pill.l b { color: var(--loss); } .pill.p b { color: var(--pending); }
+
+  /* the flowing line of team badges */
+  .flow { position: relative; overflow: hidden; border-block: 1px solid var(--line); padding-block: 18px; mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); }
+  .flow-track { display: flex; gap: 22px; width: max-content; animation: drift 60s linear infinite; }
+  .flow-track.rev { animation-direction: reverse; animation-duration: 75s; margin-top: 14px; }
+  .flow:hover .flow-track { animation-play-state: paused; }
+  @keyframes drift { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  .flow .badge { width: 58px; height: 58px; }
+  .flow { padding-block: 12px !important; }
+  .badge { flex: none; width: 78px; height: 78px; display: grid; place-items: center; animation: bob 4.6s ease-in-out infinite; filter: drop-shadow(0 10px 14px rgba(0,0,0,.45)); }
+  .badge svg { width: 100%; height: 100%; overflow: visible; }
+  .badge.sm { width: 46px; height: 46px; animation: none; filter: drop-shadow(0 4px 6px rgba(0,0,0,.4)); }
+  .badge.plain { border-radius: 50%; background: #33443c; box-shadow: 0 0 0 3px rgba(238,243,236,.9); font-family: var(--font-display); font-weight: 800; color: #fff; }
+  @keyframes bob { 0%,100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-9px) rotate(3deg); } }
+
+  /* best bets strip */
+  .best { display: grid; gap: 10px; }
+  .best-row { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+  .best-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: var(--card-bg); color: var(--card-ink); --chalk-dim: var(--card-dim); border: 1px solid var(--card-edge); border-top: 3px solid var(--flag); min-width: 0; }
+  .best-card .bc-main { min-width: 0; flex: 1; }
+  .best-card .bc-rank { font-family: var(--font-display); font-weight: 800; font-size: 1.6rem; color: var(--flag); line-height: 1; }
+  .best-card .bc-title { font-weight: 600; overflow-wrap: anywhere; }
+  .best-card .bc-sub { font-family: var(--font-mono); font-size: 11.5px; color: var(--chalk-dim); }
+  .potw { background: var(--card-bg); color: var(--card-ink); --chalk-dim: var(--card-dim); border: 1px solid var(--card-edge); border-top: 3px solid var(--flag); border-radius: 14px; padding: 14px 18px 16px; display: grid; gap: 10px; box-shadow: 0 14px 40px rgba(0,0,0,.28); }
+  .potw-tag { font: 600 11px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--flag); }
+  .hub[data-slate="sunday"] .potw-tag { color: #b07d00; }
+  .potw-top { display: flex; align-items: center; gap: 14px; }
+  .potw-top .badge.sm { width: 56px; height: 56px; }
+  .potw-title { font-family: var(--font-display); font-weight: 800; font-size: clamp(1.3rem, 4.6vw, 1.9rem); line-height: 1.05; text-transform: uppercase; letter-spacing: .01em; overflow-wrap: anywhere; }
+  .potw-odds { font-size: 20px; font-weight: 600; }
+  .potw-also { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; border-top: 1px dashed var(--card-edge); padding-top: 10px; font-size: 13px; }
+  .potw-also > span:first-child { font: 500 10.5px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--card-dim); }
+  .potw-also-item { border: 1px solid var(--card-edge); border-radius: 999px; padding: 2px 10px; }
+  @media (max-width: 520px) { .potw { padding: 12px 14px 14px; } .potw-top { gap: 10px; } .potw-top .badge.sm { width: 44px; height: 44px; } .potw-odds { font-size: 17px; } }
+  .potw-top > .pick-side { margin-left: auto; }
+  .owner-card { background: var(--card-bg); color: var(--card-ink); --chalk-dim: var(--card-dim); border: 1px solid var(--card-edge); border-radius: 14px; padding: 12px 16px; display: grid; gap: 6px; }
+  .owner-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .owner-tag { font: 600 11px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--card-dim); }
+  .owner-rec { font: 600 13px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--card-ink); }
+  .owner-rec.good { color: var(--win); } .owner-rec.bad { color: var(--loss); }
+  .owner-list { list-style: none; margin: 0; padding: 0; display: grid; }
+  .orow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; gap: 10px; align-items: center; padding: 7px 0; font-size: 13.5px; }
+  .orow + .orow { border-top: 1px solid var(--divider); }
+  .orow-legs { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .orow-odds { font: 12px var(--font-mono); color: var(--card-dim); white-space: nowrap; }
+  .orow-res { font: 600 12px var(--font-mono); white-space: nowrap; min-width: 52px; text-align: right; color: var(--pending); }
+  .orow-res.won { color: var(--win); } .orow-res.lost { color: var(--loss); } .orow-res.void { color: var(--card-dim); }
+  .orow-more { background: none; border: 0; color: var(--card-dim); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px; opacity: .55; }
+  .orow-more:hover, .orow-more:focus-visible { opacity: 1; }
+  .orow .slip-tools { grid-column: 2 / -1; }
+  .owner-more > summary { cursor: pointer; font: 500 11.5px var(--font-mono); color: var(--card-dim); padding-top: 6px; list-style: none; }
+  .owner-more > summary::-webkit-details-marker { display: none; }
+  .owner[hidden] { display: none; }
+  @media (max-width: 520px) {
+    .orow { grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "dot legs res more" "dot odds res more"; gap: 2px 10px; font-size: 13px; align-items: start; }
+    .orow > .dot { grid-area: dot; margin-top: 6px; } .orow-legs { grid-area: legs; white-space: normal; overflow: visible; line-height: 1.35; }
+    .orow-odds { grid-area: odds; display: block; font-size: 11px; } .orow-res { grid-area: res; min-width: 0; align-self: center; } .orow-more { grid-area: more; align-self: center; }
+    .orow .slip-tools { grid-column: 2 / -1; grid-row: 3; }
+    .owner-card { padding: 12px 14px; }
+  }
+  /* each non-slate tab gets its own accent so it reads as its own space */
+  .hub[data-tab="past"] .games-wrap, .hub[data-tab="past"] { --tab-accent: #d9cfb8; }
+  .hub[data-tab="td"] { --tab-accent: #ffb547; }
+  .hub[data-tab="ml"] { --tab-accent: #7cb4ff; }
+  .hub[data-tab="odds"] { --tab-accent: #c9a2ff; }
+  .hub[data-tab="recyd"] { --tab-accent: #5fd4e6; } .hub[data-tab="rushyd"] { --tab-accent: #ff9a5c; } .hub[data-tab="passyd"] { --tab-accent: #ff7aa8; }
+  .hub[data-slate="sunday"][data-tab="past"] { --tab-accent: #1f2a44; }
+  .hub[data-slate="sunday"][data-tab="past"] .tabs button[aria-selected="true"] { color: #fff; }
+  .hub[data-slate="sunday"][data-tab="td"] { --tab-accent: #b8690a; }
+  .hub[data-slate="sunday"][data-tab="ml"] { --tab-accent: #1d5fd0; }
+  .hub[data-slate="sunday"][data-tab="odds"] { --tab-accent: #6a3fd0; }
+  .hub[data-slate="sunday"][data-tab="recyd"] { --tab-accent: #0b7f93; } .hub[data-slate="sunday"][data-tab="rushyd"] { --tab-accent: #b85a12; } .hub[data-slate="sunday"][data-tab="passyd"] { --tab-accent: #b8326a; }
+  .hub:not([data-tab="current"]) .games-sec { --flag: var(--tab-accent); }
+  .hub:not([data-tab="current"]) .games-sec .pl-tile, .hub:not([data-tab="current"]) .games-sec .om, .hub:not([data-tab="current"]) .games-sec .td-card, .hub:not([data-tab="current"]) .games-sec .wk-drop { border-color: color-mix(in srgb, var(--tab-accent) 30%, transparent); }
+  .hub:not([data-tab="current"]) .games-sec .pl-tile { border-top: 2px solid var(--tab-accent); }
+  .hub:not([data-tab="current"]) .games-sec .om-head { color: var(--tab-accent); }
+  .hub[data-slate="sunday"]:not([data-tab="current"]) .games-sec .games-label { color: #fff; }
+  .best-empty { padding: 14px; border: 1px dashed var(--card-edge); border-radius: 12px; color: var(--chalk-dim); font-size: 13px; }
+  /* week tabs */
+  .tabs { display: inline-flex; border: 1px solid var(--card-edge); border-radius: 999px; overflow: hidden; background: var(--pill-bg); }
+  .tabs button { font: 500 12.5px var(--font-mono); color: var(--pill-ink); background: transparent; border: 0; padding: 6px 12px; cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--flag); color: #101820; }
+  .tabs button:focus-visible { outline: 2px solid var(--flag); outline-offset: -2px; }
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h2 { font-family: var(--font-display); font-weight: 700; font-size: clamp(1.25rem, 5.4vw, 1.7rem); text-transform: uppercase; letter-spacing: .03em; margin: 0; }
+  .muted { color: var(--chalk-dim); font-size: 13px; }
+
+  .games { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); align-items: start; }
+  .game { background: var(--card-bg); color: var(--card-ink); --chalk-dim: var(--card-dim); border: 1px solid var(--card-edge); border-radius: 14px; overflow: hidden; min-width: 0; }
+  .game-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px dashed var(--card-edge); }
+  .matchup { display: flex; align-items: center; gap: 8px; }
+  .at { font-family: var(--font-display); font-weight: 700; color: var(--chalk-dim); font-size: 16px; }
+  .game-meta { margin-left: auto; text-align: right; display: grid; gap: 2px; }
+  .kick { font-family: var(--font-mono); font-size: 12px; color: var(--chalk-dim); }
+  .status { font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; justify-self: end; padding: 2px 8px; border-radius: 4px; border: 1px solid currentColor; }
+  .status.upcoming { color: var(--pending); } .status.live { color: var(--flag); } .status.final { color: var(--chalk-dim); }
+  .picks { list-style: none; margin: 0; padding: 6px 0; }
+  /* players to watch (primetime games) */
+  .stars { padding: 12px 16px 14px; border-bottom: 1px dashed var(--card-edge); }
+  .stars-label { font: 500 11px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--flag); margin-bottom: 8px; }
+  .hub[data-slate="sunday"] .stars-label { color: #2457c5; }
+  .stars-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .stars-team { display: grid; gap: 7px; min-width: 0; align-content: start; }
+  .stars-team-head { display: flex; align-items: center; gap: 6px; font: 600 12px var(--font-mono); color: var(--card-dim); }
+  .stars-team-head .badge.sm { width: 24px; height: 24px; }
+  .star { min-width: 0; border-left: 2px solid var(--tc, var(--card-edge)); padding-left: 8px; }
+  .star-name { font-weight: 600; font-size: 14px; line-height: 1.25; overflow-wrap: anywhere; }
+  .star-pos { font: 500 10px var(--font-mono); color: var(--card-dim); border: 1px solid var(--card-edge); border-radius: 4px; padding: 0 4px; margin-left: 6px; vertical-align: 2px; white-space: nowrap; }
+  .star-line { font: 12.5px var(--font-body); font-variant-numeric: tabular-nums; color: var(--card-dim); line-height: 1.35; }
+  .stars-src { margin-top: 8px; font-size: 11px; color: var(--card-dim); }
+  @media (max-width: 360px) { .stars-cols { grid-template-columns: 1fr; } }
+  .pick { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 10px 16px; border-left: 3px solid transparent; }
+  .pick + .pick { border-top: 1px solid var(--divider); }
+  .pick.best { border-left-color: var(--flag); }
+  .pick.value { border-left-color: var(--pending); }
+  .pick.longshot { border-left-color: #c79bff; }
+  .pick-main { min-width: 0; }
+  .tier { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--chalk-dim); }
+  .pick-title { font-weight: 600; overflow-wrap: anywhere; }
+  .pick-note { font-size: 13px; color: var(--chalk-dim); overflow-wrap: anywhere; }
+  .pick-side { text-align: right; display: grid; gap: 4px; align-content: start; }
+  .odds { font-family: var(--font-mono); font-size: 15px; font-variant-numeric: tabular-nums; }
+  .pcts { font-family: var(--font-mono); font-size: 11.5px; color: var(--chalk-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .res { font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; justify-self: end; padding: 1px 7px; border-radius: 4px; }
+  .res.won { background: rgba(95,211,138,.16); color: var(--win); } .res.lost { background: rgba(255,122,107,.15); color: var(--loss); } .res.pending { background: rgba(143,179,255,.14); color: var(--pending); }
+  .games-label { grid-column: 1 / -1; font: 500 12px var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--flag); margin: 8px 0 -6px; text-shadow: var(--head-shadow); }
+  .hub[data-slate="sunday"] .games-label { color: #fff; }
+  .game.feature { grid-column: 1 / -1; border-width: 1px; border-top: 3px solid var(--flag); box-shadow: 0 18px 50px rgba(0,0,0,.35); }
+  .game.feature .game-head { padding: 18px 22px; }
+  .game.feature .matchup { gap: 14px; }
+  .game.feature .matchup .badge.sm { width: 72px; height: 72px; }
+  .game.feature .matchup .at { font-size: 1.4rem; }
+  .game.feature .kick { font-size: 14px; color: var(--card-ink); }
+  .feat-tag { font: 600 11px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--flag); }
+  .hub[data-slate="sunday"] .feat-tag { color: #2457c5; }
+  .game.feature .star-name { font-size: 15px; }
+  @media (max-width: 520px) { .game.feature .game-head { padding: 14px 16px; } .game.feature .matchup { gap: 8px; } .game.feature .matchup .badge.sm { width: 54px; height: 54px; } .game.feature .kick { font-size: 12px; } .game.feature .star-name { font-size: 14px; } }
+  .wk { grid-column: 1 / -1; background: var(--card-bg); color: var(--card-ink); border: 1px solid var(--card-edge); border-radius: 14px; padding: 16px 20px; display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+  .wk h3 { margin: 0 0 6px; font: 500 11px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--card-dim); }
+  .wk-rec { font-family: var(--font-display); font-weight: 800; font-size: 2.2rem; line-height: 1; }
+  .wk-rec .w { color: var(--win); } .wk-rec .l { color: var(--loss); }
+  .wk-sub { font-size: 13px; color: var(--card-dim); margin-top: 4px; }
+  .wk-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+  .wk-list li { display: flex; justify-content: space-between; gap: 8px; }
+  .wk-list .mono { font-family: var(--font-mono); font-size: 12px; color: var(--card-dim); white-space: nowrap; }
+  .drop { grid-column: 1 / -1; }
+  .wk-drop { background: var(--card-bg); color: var(--card-ink); --chalk-dim: var(--card-dim); border: 1px solid var(--card-edge); border-radius: 14px; overflow: hidden; }
+  .drop > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 12px; }
+  .drop > summary::-webkit-details-marker { display: none; }
+  .drop > summary::after { content: ""; flex: none; width: 9px; height: 9px; border-right: 2px solid var(--card-dim); border-bottom: 2px solid var(--card-dim); transform: rotate(45deg); margin: 0 4px 4px 4px; transition: transform .2s ease; }
+  .drop[open] > summary::after { transform: rotate(-135deg); margin-bottom: -4px; }
+  .drop > summary:focus-visible { outline: 2px solid var(--flag); outline-offset: -2px; }
+  .wk-drop > summary { padding: 16px 20px; }
+  .drop-title { font-family: var(--font-display); font-weight: 800; font-size: 1.35rem; text-transform: uppercase; letter-spacing: .02em; }
+  .drop-meta { font: 12px var(--font-mono); color: var(--card-dim); }
+  .drop-rec { margin-left: auto; font: 600 14px var(--font-mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .drop-rec .w { color: var(--win); font-weight: 600; } .drop-rec .l { color: var(--loss); font-weight: 600; }
+  .drop-rec.sm { font-size: 13px; }
+  .drop-body { border-top: 1px solid var(--card-edge); }
+  .gm-drop + .gm-drop { border-top: 1px solid var(--divider); }
+  .gm-drop > summary { padding: 10px 20px; }
+  .gm-drop > summary:hover { background: var(--divider); }
+  .gm-drop .matchup { gap: 4px; flex: none; }
+  .gm-drop .matchup .badge.sm { width: 32px; height: 32px; }
+  .gm-drop .matchup .at { font-size: 12px; }
+  .gm-info { display: grid; min-width: 0; }
+  .gm-name { font-weight: 600; font-size: 14px; }
+  .gm-score { font: 12px var(--font-mono); color: var(--card-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gm-drop .picks { border-top: 1px dashed var(--card-edge); background: var(--divider); padding-left: 8px; }
+  @media (max-width: 520px) { .wk-drop > summary { padding: 14px 14px; flex-wrap: wrap; gap: 4px 10px; } .gm-drop > summary { padding: 10px 14px; gap: 8px; } .drop-meta { order: 3; width: 100%; } }
+  /* countdown, weather, pick extras */
+  .pill.cd { color: var(--pill-ink); } .pill.cd b { color: var(--flag); font-weight: 600; }
+  .hub[data-slate="sunday"] .pill.cd b { color: #2457c5; }
+  .wx { font: 11.5px var(--font-mono); color: var(--card-dim); }
+  .pick-extra { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  .chip { font: 500 11px var(--font-mono); padding: 1px 7px; border-radius: 999px; border: 1px solid var(--card-edge); color: var(--card-dim); white-space: nowrap; }
+  .chip.good { color: var(--win); border-color: color-mix(in srgb, var(--win) 45%, transparent); }
+  .chip.bad { color: var(--loss); border-color: color-mix(in srgb, var(--loss) 40%, transparent); }
+  .prog { flex: 1 1 100%; display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; align-items: center; }
+  .prog-bar { height: 7px; border-radius: 99px; background: var(--divider); outline: 1px solid var(--card-edge); position: relative; overflow: hidden; }
+  .prog-fill { position: absolute; inset: 0 auto 0 0; border-radius: 99px; background: var(--pending); transition: width .6s ease; }
+  .prog.hit .prog-fill { background: var(--win); } .prog.dead .prog-fill { background: var(--loss); }
+  .prog-txt { font: 600 12px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .prog.hit .prog-txt { color: var(--win); } .prog.dead .prog-txt { color: var(--loss); }
+  .pick.is-new { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--flag) 55%, transparent); background: color-mix(in srgb, var(--flag) 7%, transparent); }
+  .new-tag { font: 600 10px var(--font-mono); letter-spacing: .1em; color: #101820; background: var(--flag); border-radius: 4px; padding: 0 5px; margin-left: 6px; vertical-align: 1px; }
+  .add-leg { justify-self: end; font: 600 13px var(--font-mono); border-radius: 999px; width: 26px; height: 26px; padding: 0; display: grid; place-items: center; border: 1px solid var(--card-edge); background: transparent; color: var(--card-ink); cursor: pointer; white-space: nowrap; }
+  .add-leg[aria-pressed="true"] { background: var(--flag); color: #101820; border-color: transparent; }
+  .add-leg:focus-visible { outline: 2px solid var(--flag); outline-offset: 2px; }
+  /* slip builder */
+  .builder { position: fixed; z-index: 20; left: 50%; bottom: max(12px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(560px, calc(100% - 24px)); max-height: min(70vh, 560px); overflow: auto; background: var(--card-bg); background-color: #0d1424; color: var(--card-ink); --chalk-dim: var(--card-dim); border: 1px solid var(--card-edge); border-top: 3px solid var(--flag); border-radius: 16px; box-shadow: 0 24px 60px rgba(0,0,0,.5); padding: 14px 16px; display: grid; gap: 10px; }
+  .hub[data-slate="sunday"] .builder { background-color: #fff; }
+  .builder[hidden] { display: none; }
+  .builder.min > :not(.b-head) { display: none; }
+  .b-head > div { display: flex; gap: 6px; }
+  .b-sum { font: 12px var(--font-mono); color: var(--card-dim); margin-left: 8px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+  .b-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .b-head strong { font-family: var(--font-display); font-size: 1.15rem; text-transform: uppercase; letter-spacing: .03em; }
+  .b-btn { font: 500 12px var(--font-mono); background: transparent; color: var(--card-dim); border: 1px solid var(--card-edge); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+  .b-legs { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13.5px; }
+  .b-legs li { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+  .b-legs .mono { font: 12px var(--font-mono); color: var(--card-dim); white-space: nowrap; }
+  .b-legs button { background: none; border: 0; color: var(--card-dim); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
+  .b-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .b-stat { border: 1px solid var(--card-edge); border-radius: 10px; padding: 7px 9px; min-width: 0; }
+  .b-stat span { display: block; font: 10.5px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--card-dim); }
+  .b-stat b { font: 700 1.05rem var(--font-mono); font-variant-numeric: tabular-nums; }
+  .b-stat b.good { color: var(--win); } .b-stat b.bad { color: var(--loss); }
+  .b-note { font-size: 12px; color: var(--card-dim); }
+  .b-form { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+  .b-form label { display: grid; gap: 3px; font: 11px var(--font-mono); color: var(--card-dim); flex: 1 1 110px; }
+  .b-form input { font: 15px var(--font-mono); padding: 7px 9px; border-radius: 8px; border: 1px solid var(--card-edge); background: transparent; color: var(--card-ink); width: 100%; min-width: 0; }
+  .b-form input:focus-visible { outline: 2px solid var(--flag); outline-offset: 0; }
+  .b-save { font: 600 13px var(--font-mono); background: var(--flag); color: #101820; border: 0; border-radius: 8px; padding: 9px 14px; cursor: pointer; flex: 1 1 110px; }
+  .b-save:disabled { opacity: .5; cursor: default; }
+  .b-msg { font-size: 12px; color: var(--card-dim); min-height: 0; }
+  @media (max-width: 420px) { .b-stat { padding: 6px 7px; } .b-stat span { font-size: 9.5px; letter-spacing: .02em; } .b-stat b { font-size: .95rem; } .pl-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } .pl-tile { padding: 10px; } .pl-tile b { font-size: 1.05rem; } .pl-tile span { font-size: 9.5px; letter-spacing: .03em; } .pl-tile small { font-size: 11px; } }
+  /* my slips */
+  .pl-row { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); margin-top: 12px; }
+  .pl-tile { background: var(--card-bg); color: var(--card-ink); border: 1px solid var(--card-edge); border-radius: 12px; padding: 12px 14px; }
+  .pl-tile span { display: block; font: 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--card-dim); }
+  .pl-tile b { font: 800 1.7rem var(--font-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pl-tile b.good { color: var(--win); } .pl-tile b.bad { color: var(--loss); }
+  .pl-tile small { display: block; font-size: 12px; color: var(--card-dim); }
+  .slips { display: grid; gap: 10px; margin-top: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); align-items: start; }
+  .slip { background: var(--card-bg); color: var(--card-ink); --chalk-dim: var(--card-dim); border: 1px solid var(--card-edge); border-left: 3px solid var(--pending); border-radius: 12px; padding: 12px 14px; display: grid; gap: 8px; }
+  .slip.won { border-left-color: var(--win); } .slip.lost { border-left-color: var(--loss); }
+  .slip-head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .slip-head strong { font-size: 14px; }
+  .slip-pl { font: 700 15px var(--font-mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .slip-pl.good { color: var(--win); } .slip-pl.bad { color: var(--loss); }
+  .slip-sub { font: 12px var(--font-mono); color: var(--card-dim); }
+  .slip ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 13px; }
+  .slip li { display: flex; gap: 8px; align-items: baseline; }
+  .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--pending); transform: translateY(-1px); }
+  .dot.won { background: var(--win); } .dot.lost { background: var(--loss); }
+  .slip-tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .slip-tools select { font: 12px var(--font-mono); background: transparent; color: var(--card-ink); border: 1px solid var(--card-edge); border-radius: 999px; padding: 3px 8px; }
+  .slip-tools select option { color: #101820; }
+  @media (max-width: 420px) { .pl-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } .pl-tile { padding: 10px; } .pl-tile b { font-size: 1.1rem; } .pl-tile span { font-size: 9.5px; letter-spacing: .03em; } .pl-tile small { font-size: 11px; } }
+  .om { background: var(--card-bg); color: var(--card-ink); border: 1px solid var(--card-edge); border-radius: 14px; overflow: hidden; }
+  .om-row { display: grid; grid-template-columns: minmax(0, 1fr) 64px 78px 70px; gap: 10px; align-items: center; padding: 10px 16px; }
+  .om-row + .om-row { border-top: 1px solid var(--divider); }
+  .om-head { font: 500 10.5px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--card-dim); padding-block: 9px; border-bottom: 1px solid var(--card-edge); }
+  .om-head span:not(:first-child), .om-num { text-align: right; }
+  .om-pick { display: grid; min-width: 0; } .om-pick b { font-weight: 600; font-size: 14px; } .om-pick small { font-size: 12px; color: var(--card-dim); }
+  .om-num { font: 13px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .om-move { font-weight: 600; } .om-move.good { color: var(--win); } .om-move.bad { color: var(--loss); }
+  @media (max-width: 420px) { .om-row { grid-template-columns: minmax(0, 1fr) 50px 56px 52px; gap: 6px; padding: 9px 12px; } .om-num { font-size: 12px; } }
+  .games[hidden], #slips-view[hidden] { display: none; }
+  .tabs button { white-space: nowrap; }
+  @media (max-width: 520px) { .tabs { width: 100%; min-width: 0; max-width: 100%; flex: 1 1 100%; overflow-x: auto; scrollbar-width: none; } .tabs::-webkit-scrollbar { display: none; } .tabs button { padding: 6px 10px; font-size: 11.5px; flex: 1 0 auto; } }
+  section.best[hidden] { display: none; }
+  .ginfo { border-top: 1px dashed var(--card-edge); }
+  .ginfo > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 10px 16px; font: 500 11.5px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--card-dim); }
+  .ginfo > summary::-webkit-details-marker { display: none; }
+  .ginfo > summary::after { content: ""; width: 7px; height: 7px; border-right: 2px solid var(--card-dim); border-bottom: 2px solid var(--card-dim); transform: rotate(45deg); margin: 0 2px 3px auto; flex: none; transition: transform .2s; }
+  .ginfo[open] > summary::after { transform: rotate(-135deg); margin-bottom: -3px; }
+  .ginfo > summary:hover { color: var(--card-ink); }
+  .ginfo > summary:focus-visible { outline: 2px solid var(--flag); outline-offset: -2px; }
+  .ginfo-wx { text-transform: none; letter-spacing: 0; margin-left: auto; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .ginfo .stars { border-bottom: 0; padding-top: 4px; }
+  @media (max-width: 520px) { .tally .pill { font-size: 12px; padding: 5px 10px; } .tally { gap: 6px; } #potw-sub { display: none; } }
+  .td-list { display: grid; gap: 8px; }
+  .srch input { font: 13px var(--font-body); background: var(--card-bg); color: var(--card-ink); border: 1px solid var(--card-edge); border-radius: 999px; padding: 6px 12px; width: 200px; max-width: 100%; }
+  .srch input:focus-visible { outline: 2px solid var(--flag); outline-offset: 0; }
+  .srch-out { display: grid; gap: 8px; margin-top: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+  .srch-out[hidden] { display: none; }
+  .srch-card { background: var(--card-bg); color: var(--card-ink); border: 1px solid var(--card-edge); border-left: 2px solid var(--flag); border-radius: 10px; padding: 10px 12px; }
+  .srch-h { display: flex; align-items: center; gap: 8px; } .srch-h .badge.sm { width: 24px; height: 24px; }
+  .srch-card ul { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 3px; font: 12px var(--font-mono); color: var(--card-dim); }
+  .srch-none { color: var(--chalk-dim); font-size: 13px; }
+  .parl { grid-column: 1 / -1; background: var(--card-bg); color: var(--card-ink); border: 1px solid var(--card-edge); border-radius: 10px; padding: 10px 14px; display: grid; gap: 4px; }
+  .parl-h { font: 600 10.5px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--gold, #f2b705); margin-bottom: 2px; }
+  .parl-r { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 10px; align-items: center; padding: 5px 0; font-size: 13.5px; }
+  .parl-r + .parl-r { border-top: 1px solid var(--divider); }
+  .parl-r b { font: 800 1.1rem var(--font-display); } .parl-r small { font: 11px var(--font-mono); color: var(--card-dim); white-space: nowrap; }
+  .rec-row, .cal-row { grid-template-columns: minmax(0, 1fr) 60px 70px 70px; }
+  @media (max-width: 520px) { .srch { width: 100%; } .srch input { width: 100%; } .parl-r { grid-template-columns: minmax(0, 1fr) auto auto; } .parl-r small { display: none; } .rec-row, .cal-row { grid-template-columns: minmax(0, 1fr) 44px 56px 56px; } }
+  .tab-groups { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 10px; }
+  .tab-group { display: grid; gap: 5px; min-width: 0; }
+  .tg-label { font: 600 10.5px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--chalk-dim); text-shadow: var(--head-shadow); }
+  .tab-group .tabs { width: auto; }
+  .yd-filter { justify-self: start; }
+  .yd-filter button[aria-pressed="true"] { background: var(--flag); color: #101820; }
+  .tdb.yd { grid-template-columns: 22px 30px minmax(0, 1fr) auto 48px; }
+  .yd-line { font: 600 12px var(--font-mono); white-space: nowrap; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--card-edge); }
+  .yd-line.o { color: var(--win); } .yd-line.u { color: var(--pending); }
+  @media (max-width: 520px) { .tab-groups { display: grid; gap: 8px; } .tab-group .tabs { width: 100%; } .tdb.yd { grid-template-columns: 18px 24px minmax(0, 1fr) auto 40px; } .yd-line { font-size: 11px; padding: 1px 6px; } }
+  .tdb-list { display: grid; background: var(--card-bg); color: var(--card-ink); border: 1px solid var(--card-edge); border-radius: 14px; overflow: hidden; }
+  .tdb { display: grid; grid-template-columns: 22px 30px minmax(0, 1fr) minmax(60px, 160px) 44px; gap: 10px; align-items: center; padding: 8px 14px; }
+  .tdb + .tdb { border-top: 1px solid var(--divider); }
+  .tdb.pk { background: color-mix(in srgb, var(--flag) 8%, transparent); }
+  .tdb-rk { font: 600 12px var(--font-mono); color: var(--card-dim); text-align: right; }
+  .tdb .badge.sm { width: 28px; height: 28px; }
+  .tdb-nm { display: grid; min-width: 0; } .tdb-nm b { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .tdb-nm small { font: 11px var(--font-mono); color: var(--card-dim); }
+  .tdb-bar { height: 6px; border-radius: 99px; background: var(--divider); overflow: hidden; } .tdb-bar i { display: block; height: 100%; background: var(--flag); border-radius: 99px; }
+  .tdb-pc { font: 800 1.15rem var(--font-display); text-align: right; font-variant-numeric: tabular-nums; }
+  .tdb-more > summary { cursor: pointer; list-style: none; font: 500 12px var(--font-mono); color: var(--chalk-dim); padding: 4px 2px 8px; }
+  .tdb-more > summary::-webkit-details-marker { display: none; }
+  @media (max-width: 520px) { .tdb { grid-template-columns: 18px 24px minmax(0, 1fr) 40px 40px; gap: 8px; padding: 8px 10px; } .tdb .badge.sm { width: 24px; height: 24px; } .tdb-nm b { font-size: 13px; } }
+  .td-hit { font: 800 1.6rem var(--font-display); line-height: 1; color: var(--flag); font-variant-numeric: tabular-nums; }
+  .td-hit-l { font: 10.5px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--card-dim); }
+  .wc-list { grid-column: 1 / -1; display: grid; gap: 8px; }
+  .wc { display: grid; grid-template-columns: 130px minmax(0, 1fr) 130px; gap: 14px; align-items: center; background: var(--card-bg); color: var(--card-ink); border: 1px solid var(--card-edge); border-radius: 12px; padding: 10px 16px; }
+  .wc-side { display: flex; align-items: center; gap: 8px; font: 600 13px var(--font-mono); color: var(--card-dim); }
+  .wc-side.h { flex-direction: row-reverse; text-align: right; }
+  .wc-side .badge.sm { width: 32px; height: 32px; }
+  .wc-side b { font: 800 1.35rem var(--font-display); color: var(--card-dim); font-variant-numeric: tabular-nums; }
+  .wc-side.fav b { color: var(--card-ink); }
+  .wc-mid { display: grid; gap: 4px; justify-items: center; }
+  .wc-bar { width: 100%; height: 8px; border-radius: 99px; overflow: hidden; display: flex; background: var(--divider); }
+  .wc-bar i { display: block; height: 100%; }
+  .wc-bar i + i { box-shadow: inset 2px 0 0 var(--card-bg); }
+  .wc-mid small { font: 11px var(--font-mono); color: var(--card-dim); }
+  .wc-ex { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 18px; padding-top: 8px; border-top: 1px solid var(--divider); }
+  .wc-cell { display: flex; gap: 10px; align-items: baseline; font: 12px var(--font-mono); color: var(--card-dim); }
+  .wc-cell i { font-style: normal; text-transform: uppercase; letter-spacing: .08em; font-size: 10.5px; color: var(--flag); min-width: 74px; }
+  .wc-cell b { font-weight: 600; color: var(--card-ink); }
+  .wc-riv { color: var(--flag); font-weight: 600; margin-right: 6px; text-transform: uppercase; letter-spacing: .06em; }
+  .wc-riv::after { content: ' ·'; color: var(--card-dim); font-weight: 400; }
+  @media (max-width: 520px) { .wc { grid-template-columns: 84px minmax(0, 1fr) 84px; gap: 8px; padding: 10px 12px; } .wc-side .badge.sm { width: 26px; height: 26px; } .wc-side span { display: none; } .wc-side b { font-size: 1.1rem; } .wc-mid small { font-size: 10px; text-align: center; } }
+  .ml-team b { display: flex; align-items: center; gap: 6px; } .ml-team .badge.sm { width: 26px; height: 26px; }
+  .om .ml-row + .ml-row:nth-of-type(odd) { border-top: 1px solid var(--card-edge); }
+  .td-card { display: flex; align-items: center; gap: 12px; background: var(--card-bg); color: var(--card-ink); --chalk-dim: var(--card-dim); border: 1px solid var(--card-edge); border-radius: 12px; padding: 12px 14px; }
+  .td-card.fav { border-left: 3px solid var(--flag); }
+  .td-main { flex: 1; min-width: 0; }
+  .td-past { padding: 12px 20px 16px; border-top: 1px solid var(--card-edge); gap: 6px; }
+  .td-pl { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .wrap > * { min-width: 0; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .section-head > * { min-width: 0; }
+  .slips-empty { grid-column: 1 / -1; padding: 16px; border: 1px dashed var(--card-edge); border-radius: 12px; color: var(--chalk-dim); font-size: 13.5px; background: var(--pill-bg); }
+  .no-picks { padding: 14px 16px; color: var(--chalk-dim); font-size: 13px; }
+
+  .pick.pop { animation: pop .9s cubic-bezier(.2, 1.4, .4, 1) both; }
+  @keyframes pop { 0% { transform: scale(.6) translateY(10px); opacity: 0; background: rgba(242,194,48,.35); } 60% { opacity: 1; } 100% { transform: none; background: transparent; } }
+
+  .empty { border: 1px dashed var(--card-edge); border-radius: 14px; padding: 28px; text-align: center; background: var(--card-bg); color: var(--card-dim); }
+  .empty strong { display: block; color: var(--card-ink); font-family: var(--font-display); font-size: 1.4rem; text-transform: uppercase; letter-spacing: .03em; }
+  .yard { position: absolute; font-family: var(--font-display); font-weight: 800; font-size: 13px; color: rgba(238,243,236,.18); top: 4px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .flow-track, .badge, .pick.pop { animation: none !important; }
+    .flow { overflow-x: auto; }
+  }
+
+  /* ================= COMMAND THEME: black / graphite / white, orange + gold accents, compact ================= */
+  html, body, html:has(.hub[data-slate]), html:has(.hub[data-slate]) body { background: #0a0a0b !important; }
+  .hub.hub, .hub.hub[data-slate] {
+    --hub-bg: radial-gradient(90% 40% at 50% -8%, rgba(255,122,26,.10), transparent 70%), linear-gradient(180deg, #0a0a0b 0%, #0f1012 55%, #0a0a0b 100%);
+    --card-bg: #131416; --card-ink: #f2f2f0; --card-dim: #8b8e94; --card-edge: #25272b; --line: #1f2124;
+    --chalk: #f2f2f0; --chalk-dim: #8f9298; --flag: #ff7a1a; --gold: #f2b705;
+    --pending: #b4b7bd; --win: #f2b705; --loss: #ff5436;
+    --pill-bg: #131416; --pill-ink: #e6e6e4; --divider: #1c1e21; --head-shadow: none;
+    --font-display: "Saira Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  }
+  .hub.hub[data-slate="snf"] { --flag: #f2b705; }
+  .hub.hub[data-slate="mnf"] { --flag: #ff5a1f; }
+  .hub.hub[data-slate="sunday"] { --flag: #f2b705; }
+  .hub.hub .sky { display: none !important; }
+  .hub.hub { color: var(--chalk); }
+  /* every slate-specific colour now follows the accent */
+  .hub.hub .eyebrow, .hub.hub .stars-label, .hub.hub .feat-tag, .hub.hub .potw-tag, .hub.hub .games-label, .hub.hub .best-card .bc-rank, .hub.hub .pill.rec .rpct, .hub.hub .pill.cd b, .hub.hub .wc-riv { color: var(--flag) !important; }
+  .hub.hub .game .status.live { color: var(--flag) !important; }
+  .hub.hub .tabs button[aria-selected="true"], .hub.hub .slate-pick button[aria-pressed="true"], .hub.hub .yd-filter button[aria-pressed="true"] { background: var(--flag) !important; color: #0a0a0b !important; }
+  /* tabs: picks group = orange, model group = gold */
+  .hub.hub:not([data-tab="current"]) .games-sec { --flag: var(--tab-accent); }
+  .hub.hub[data-tab="past"], .hub.hub[data-tab="odds"], .hub.hub[data-tab="record"] { --tab-accent: #ff7a1a; }
+  .hub.hub[data-tab="td"], .hub.hub[data-tab="ml"], .hub.hub[data-tab="recyd"], .hub.hub[data-tab="rushyd"], .hub.hub[data-tab="passyd"] { --tab-accent: #f2b705; }
+  .hub.hub .yd-line.o { color: var(--gold); } .hub.hub .yd-line.u { color: #e6e6e4; }
+  .hub.hub .chip.good { color: var(--gold); } .hub.hub .chip.bad { color: var(--loss); }
+  .hub.hub .res.won { background: rgba(242,183,5,.14); color: var(--gold); } .hub.hub .res.lost { background: rgba(255,84,54,.13); color: var(--loss); } .hub.hub .res.pending { background: #1c1e21; color: #b4b7bd; }
+  .hub.hub .pick.value { border-left-color: #6b6e74; } .hub.hub .pick.longshot { border-left-color: #f2b705; } .hub.hub .pick.safe { border-left-color: #3a3d42; }
+  .hub.hub .prog-fill { background: #8b8e94; } .hub.hub .prog.hit .prog-fill { background: var(--gold); } .hub.hub .prog.dead .prog-fill { background: var(--loss); }
+  .hub.hub .tdb-bar i { background: var(--flag); }
+  .hub.hub .builder { background-color: #111214; }
+  /* compact sizing */
+  .hub.hub .wrap { gap: 18px; padding-block: 18px 44px; }
+  .hub.hub h1 { font-size: clamp(2rem, 5.2vw, 3.1rem); letter-spacing: .02em; }
+  .hub.hub h2 { font-size: clamp(1.1rem, 4.2vw, 1.35rem); letter-spacing: .06em; }
+  .hub.hub .eyebrow { font-size: 11px; letter-spacing: .18em; }
+  .hub.hub .flow { padding-block: 8px !important; border-color: #1c1e21; }
+  .hub.hub .flow .badge { width: 46px; height: 46px; filter: drop-shadow(0 6px 8px rgba(0,0,0,.6)); }
+  .hub.hub .flow-track { gap: 16px; }
+  .hub.hub .pill { padding: 5px 10px; font-size: 12px; }
+  .hub.hub .game, .hub.hub .potw, .hub.hub .owner-card, .hub.hub .tdb-list, .hub.hub .om, .hub.hub .wk-drop, .hub.hub .pl-tile, .hub.hub .td-card, .hub.hub .wc { border-radius: 10px; box-shadow: none; }
+  .hub.hub .game-head { padding: 11px 14px; } .hub.hub .pick { padding: 9px 14px; }
+  .hub.hub .game.feature .game-head { padding: 14px 18px; }
+  .hub.hub .game.feature .matchup .badge.sm { width: 58px; height: 58px; }
+  .hub.hub .potw { padding: 12px 16px 14px; border-top-width: 2px; }
+  .hub.hub .potw-top .badge.sm { width: 46px; height: 46px; }
+  .hub.hub .potw-title { font-size: clamp(1.15rem, 4vw, 1.6rem); }
+  .hub.hub .games { gap: 12px; }
+  .hub.hub .tabs button { padding: 5px 11px; font-size: 12px; }
+  .hub.hub .tg-label { color: #6f7278; }
+  .hub.hub .game.feature { border-top-width: 2px; }
+  .hub.hub .pl-tile b { font-size: 1.45rem; }
+  .hub.hub .tdb { padding-block: 7px; }
+</style>
+
+<div class="hub" id="hub">
+  <canvas class="sky" id="sky" aria-hidden="true"></canvas>
+  <div class="wrap">
+    <header class="top">
+      <div>
+        <div class="eyebrow" id="week-label">NFL picks · live from research</div>
+        <h1>The Pocket</h1>
+      </div>
+      <div class="tally" aria-label="Pick results">
+        <span class="pill rec">Record <b class="rw" id="t-won">0</b>–<b class="rl" id="t-lost">0</b> · <b class="rpct" id="t-pct">–</b> win<span class="rp"> · <b id="t-pend">0</b> pending</span></span>
+        <span class="pill cd" id="countdown" hidden></span>
+        <div class="slate-pick" role="group" aria-label="Background">
+          <button type="button" data-slate="auto" aria-pressed="true">Auto</button>
+          <button type="button" data-slate="tnf" aria-pressed="false">TNF</button>
+          <button type="button" data-slate="sunday" aria-pressed="false">Sunday</button>
+          <button type="button" data-slate="snf" aria-pressed="false">SNF</button>
+          <button type="button" data-slate="mnf" aria-pressed="false">MNF</button>
+        </div>
+      </div>
+    </header>
+
+
+    <div class="flow" aria-label="Teams on this week's slate">
+      <div class="flow-track" id="flow-a"></div>
+    </div>
+
+    <section class="best" aria-labelledby="best-h">
+      <h2 id="best-h" class="sr-only">Pick of the week</h2>
+      <div class="best-row" id="best-row"></div>
+    </section>
+
+    <section class="owner" id="owner" hidden aria-labelledby="owner-h">
+      <div class="owner-card">
+        <div class="owner-head"><span class="owner-tag" id="owner-h">Owner's slips</span><span class="owner-rec" id="owner-rec"></span></div>
+        <ul class="owner-list" id="owner-list"></ul>
+        <details class="owner-more" id="owner-more" hidden><summary>All owner slips</summary><ul class="owner-list" id="owner-all"></ul></details>
+      </div>
+    </section>
+
+    <section class="games-sec">
+      <div class="section-head">
+        <h2>Games &amp; picks</h2>
+        <label class="srch"><span class="sr-only">Search a player</span><input id="srch" type="search" placeholder="Search a player" autocomplete="off"></label>
+      </div>
+      <div id="srch-out" class="srch-out" hidden></div>
+      <div class="tab-groups">
+        <div class="tab-group"><span class="tg-label">Picks</span>
+          <div class="tabs" role="tablist" aria-label="Picks">
+            <button type="button" role="tab" id="tab-current" aria-selected="true" aria-controls="games">This week</button>
+            <button type="button" role="tab" id="tab-past" aria-selected="false" aria-controls="games">Past weeks</button>
+            <button type="button" role="tab" id="tab-odds" aria-selected="false" aria-controls="games">Odds moves</button>
+            <button type="button" role="tab" id="tab-record" aria-selected="false" aria-controls="games">Record</button>
+          </div>
+        </div>
+        <div class="tab-group"><span class="tg-label">Model hit rates</span>
+          <div class="tabs" role="tablist" aria-label="Model hit rates">
+            <button type="button" role="tab" id="tab-td" aria-selected="false" aria-controls="games">TDs</button>
+            <button type="button" role="tab" id="tab-ml" aria-selected="false" aria-controls="games">Game lines</button>
+            <button type="button" role="tab" id="tab-recyd" aria-selected="false" aria-controls="games">Rec yards</button>
+            <button type="button" role="tab" id="tab-rushyd" aria-selected="false" aria-controls="games">Rush yards</button>
+            <button type="button" role="tab" id="tab-passyd" aria-selected="false" aria-controls="games">Pass yards</button>
+          </div>
+        </div>
+      </div>
+      <p class="muted" id="sync" style="margin:6px 0 0">Connecting to the picks board…</p>
+      <div class="games" id="games" style="margin-top:14px"></div>
+    </section>
+  </div>
+  <aside class="builder" id="builder" hidden aria-label="Slip builder">
+    <div class="b-head"><strong id="b-title">Slip</strong><div><button type="button" class="b-btn" id="b-min" aria-expanded="true">Hide</button><button type="button" class="b-btn" id="b-clear">Clear</button></div></div>
+    <ul class="b-legs" id="b-legs"></ul>
+    <div class="b-stats" id="b-stats"></div>
+    <div class="b-note" id="b-note"></div>
+    <div class="b-form">
+      <label>FanDuel odds<input id="b-odds" inputmode="text" autocomplete="off" placeholder="+250"></label>
+      <label>Stake $<input id="b-stake" inputmode="decimal" autocomplete="off" placeholder="10"></label>
+      <button type="button" class="b-save" id="b-save">Save owner's slip</button>
+    </div>
+    <div class="b-msg" id="b-msg" role="status"></div>
+  </aside>
+</div>
+
+<script>
+(() => {
+  // Team colors (primary, secondary). Badges show the team abbreviation; no logos.
+  const TEAMS = {
+    ARI:['#97233F','#FFB612'], ATL:['#A71930','#101820'], BAL:['#241773','#9E7C0C'], BUF:['#00338D','#C60C30'],
+    CAR:['#0085CA','#101820'], CHI:['#0B162A','#C83803'], CIN:['#FB4F14','#101820'], CLE:['#311D00','#FF3C00'],
+    DAL:['#003594','#869397'], DEN:['#FB4F14','#002244'], DET:['#0076B6','#B0B7BC'], GB:['#203731','#FFB612'],
+    HOU:['#03202F','#A71930'], IND:['#002C5F','#A2AAAD'], JAX:['#006778','#D7A22A'], KC:['#E31837','#FFB81C'],
+    LV:['#101820','#A5ACAF'], LAC:['#0080C6','#FFC20E'], LA:['#003594','#FFA300'], MIA:['#008E97','#FC4C02'],
+    MIN:['#4F2683','#FFC62F'], NE:['#002244','#C60C30'], NO:['#D3BC8D','#101820'], NYG:['#0B2265','#A71930'],
+    NYJ:['#125740','#FFFFFF'], PHI:['#004C54','#A5ACAF'], PIT:['#FFB612','#101820'], SF:['#AA0000','#B3995D'],
+    SEA:['#002244','#69BE28'], TB:['#D50A0A','#34302B'], TEN:['#0C2340','#4B92DB'], WAS:['#5A1414','#FFB612']
+  };
+  const LIGHT = new Set(['NO', 'PIT']);
+  const $ = (id) => document.getElementById(id);
+
+  const CITY = { ARI:'Arizona', ATL:'Atlanta', BAL:'Baltimore', BUF:'Buffalo', CAR:'Carolina', CHI:'Chicago', CIN:'Cincinnati', CLE:'Cleveland',
+    DAL:'Dallas', DEN:'Denver', DET:'Detroit', GB:'Green Bay', HOU:'Houston', IND:'Indianapolis', JAX:'Jacksonville', KC:'Kansas City',
+    LV:'Las Vegas', LAC:'Los Angeles', LA:'Los Angeles', MIA:'Miami', MIN:'Minnesota', NE:'New England', NO:'New Orleans', NYG:'New York',
+    NYJ:'New York', PHI:'Philadelphia', PIT:'Pittsburgh', SF:'San Francisco', SEA:'Seattle', TB:'Tampa Bay', TEN:'Tennessee', WAS:'Washington' };
+  // Original crest shapes and patterns, assigned per team so the line reads as a row of team crests.
+  const SHAPES = {
+    shield: 'M50 3 L93 15 V48 C93 73 73 89 50 97 C27 89 7 73 7 48 V15 Z',
+    hex: 'M50 3 L93 26 V74 L50 97 L7 74 V26 Z',
+    pennant: 'M8 6 H92 V58 L50 97 L8 58 Z',
+    round: 'M50 3 A47 47 0 1 1 49.99 3 Z'
+  };
+  const SHAPE_KEYS = Object.keys(SHAPES);
+  let crestSeq = 0;
+  const hash = (t) => [...t].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
+  function crestSVG(abbr, small) {
+    const [c1, c2] = TEAMS[abbr];
+    const h = hash(abbr);
+    const shape = SHAPE_KEYS[h % 4], pat = (h >> 3) % 4;
+    const id = 'cr' + (++crestSeq);
+    const ink = LIGHT.has(abbr) ? '#101820' : '#ffffff';
+    const pattern = [
+      '<path d="M-10 70 L70 -10 L92 -10 L-10 92 Z" fill="' + c2 + '"/>',                                   // sash
+      '<rect x="30" y="0" width="8" height="100" fill="' + c2 + '"/><rect x="62" y="0" width="8" height="100" fill="' + c2 + '"/>', // twin stripes
+      '<path d="M0 66 L50 40 L100 66 V80 L50 54 L0 80 Z" fill="' + c2 + '"/>',                           // chevron
+      '<rect x="0" y="70" width="100" height="12" fill="' + c2 + '"/><rect x="0" y="86" width="100" height="5" fill="' + c2 + '"/>'  // bands
+    ][pat];
+    const size = abbr.length === 3 ? 30 : 36;
+    const city = small ? '' : '<text x="50" y="' + (shape === 'pennant' ? 22 : 26) + '" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="' + (CITY[abbr].length > 11 ? 7 : 8.5) + '" letter-spacing="1" fill="' + ink + '" opacity=".9">' + CITY[abbr].toUpperCase() + '</text>';
+    return '<svg viewBox="0 0 100 100" aria-hidden="true">' +
+      '<defs><clipPath id="' + id + '"><path d="' + SHAPES[shape] + '"/></clipPath></defs>' +
+      '<g clip-path="url(#' + id + ')"><rect width="100" height="100" fill="' + c1 + '"/>' + pattern + '</g>' +
+      '<path d="' + SHAPES[shape] + '" fill="none" stroke="#eef3ec" stroke-width="4" stroke-linejoin="round"/>' +
+      '<path d="' + SHAPES[shape] + '" fill="none" stroke="' + c2 + '" stroke-width="1.5" stroke-linejoin="round" transform="translate(50 50) scale(.86) translate(-50 -50)"/>' +
+      city +
+      '<text x="50" y="' + (small ? 61 : 63) + '" text-anchor="middle" font-family="Saira Condensed, Arial Narrow, sans-serif" font-weight="800" font-size="' + size + '" fill="' + ink + '" stroke="' + (LIGHT.has(abbr) ? 'none' : 'rgba(0,0,0,.35)') + '" stroke-width="1" paint-order="stroke">' + abbr + '</text>' +
+      '</svg>';
+  }
+  function badge(abbr, small) {
+    const el = document.createElement('div');
+    el.className = 'badge' + (small ? ' sm' : '');
+    el.title = (CITY[abbr] || abbr) ;
+    if (TEAMS[abbr]) el.innerHTML = crestSVG(abbr, small);    // abbr is a fixed key of TEAMS here
+    else { el.classList.add('plain'); el.textContent = abbr || '?'; }
+    if (!small) el.style.animationDelay = (-Math.random() * 4.6).toFixed(2) + 's';
+    return el;
+  }
+
+  function fillFlow(abbrs) {
+    const list = abbrs.length ? abbrs : Object.keys(TEAMS);
+    const half = Math.ceil(list.length / 2);
+    const rows = [list];
+    [$('flow-a')].forEach((track, i) => {
+      track.replaceChildren();
+      let row = rows[i];
+      while (row.length < 16) row = row.concat(rows[i]);       // keep the line full on wide screens
+      [...row, ...row].forEach((a) => track.appendChild(badge(a, false)));  // doubled for a seamless loop
+    });
+  }
+
+  const fmtOdds = (o) => (o == null || o === '' ? '' : (Number(o) > 0 ? '+' + Number(o) : String(o)));
+  const pct = (x) => (x == null || x === '' ? '–' : Math.round(Number(x) * 100) + '%');
+  const dateFmt = new Intl.DateTimeFormat('en-CA', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/Toronto' });
+  const kickFmt = new Intl.DateTimeFormat('en-CA', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/Toronto' });
+  const TIER = { best: 'Best bet', value: 'Value', longshot: 'Long shot', safe: 'High hit rate' };
+  const STATUS_ORDER = { live: 0, upcoming: 1, final: 2 };
+
+  let games = [], picks = [], slips = [], firstPicks = true, DB = null, meta = {};
+  const legs = [];                       // pick ids in the slip builder
+  let prevSeen = null;
+  try { prevSeen = localStorage.getItem('hub-seen-at'); } catch (_) {}
+  const implied = (am) => { am = Number(am); if (!am) return null; return am < 0 ? -am / (-am + 100) : 100 / (am + 100); };
+  const toAm = (pr) => { if (!(pr > 0 && pr < 1)) return null; return pr >= 0.5 ? -Math.round(100 * pr / (1 - pr)) : Math.round(100 * (1 - pr) / pr); };
+  const dec = (am) => { am = Number(am); return am < 0 ? 1 + 100 / -am : 1 + am / 100; };
+  const money = (x) => (x < 0 ? '−$' : (x > 0 ? '+$' : '$')) + Math.abs(x).toFixed(2);
+  const parseAm = (v) => { const n = Number(String(v || '').replace(/[^\d+\-.]/g, '')); return n && Math.abs(n) >= 100 ? Math.round(n) : null; };
+  const legProb = (p) => (p.model_pct != null ? Number(p.model_pct) : p.book_pct != null ? Number(p.book_pct) : implied(p.odds));
+  // inverse normal CDF (Acklam)
+  function invNorm(pr) {
+    const a = [-39.69683028665376, 220.9460984245205, -275.9285104469687, 138.357751867269, -30.66479806614716, 2.506628277459239];
+    const b = [-54.47609879822406, 161.5858368580409, -155.6989798598866, 66.80131188771972, -13.28068155288572];
+    const c = [-0.007784894002430293, -0.3223964580411365, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783];
+    const d = [0.007784695709041462, 0.3224671290700398, 2.445134137142996, 3.754408661907416];
+    const q0 = Math.min(Math.max(pr, 1e-9), 1 - 1e-9);
+    if (q0 < 0.02425) { const q = Math.sqrt(-2 * Math.log(q0)); return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1); }
+    if (q0 > 1 - 0.02425) { const q = Math.sqrt(-2 * Math.log(1 - q0)); return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1); }
+    const q = q0 - 0.5, r = q * q;
+    return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+  }
+  // chance every leg hits: Gaussian copula over the legs' probabilities, linked by same-game correlations from the sim (game.corr["idA|idB"])
+  function jointProb(ls) {
+    const k = ls.length; if (!k) return null;
+    const ps = ls.map(legProb); if (ps.some((x) => !(x > 0 && x < 1))) return null;
+    let usedCorr = false, sameGameNoCorr = false;
+    const R = ls.map((a, i) => ls.map((b, j) => {
+      if (i === j) return 1;
+      if (a.game_id !== b.game_id) return 0;
+      const g = games.find((x) => x.id === a.game_id), key = [a.id, b.id].sort().join('|');
+      const r = g && g.corr ? g.corr[key] : undefined;
+      if (typeof r === 'number') { usedCorr = true; return Math.max(-0.95, Math.min(0.95, r)); }
+      sameGameNoCorr = true; return 0;
+    }));
+    let L = null;
+    for (let shrink = 1; shrink > 0.05 && !L; shrink *= 0.85) {
+      const M = R.map((row, i) => row.map((v, j) => (i === j ? 1 : v * shrink)));
+      const C = M.map(() => new Array(k).fill(0)); let ok = true;
+      for (let i = 0; i < k && ok; i++) for (let j = 0; j <= i; j++) {
+        let sum = M[i][j]; for (let t = 0; t < j; t++) sum -= C[i][t] * C[j][t];
+        if (i === j) { if (sum <= 1e-9) { ok = false; break; } C[i][i] = Math.sqrt(sum); } else C[i][j] = sum / C[j][j];
+      }
+      if (ok) L = C;
+    }
+    const z = ps.map(invNorm);
+    let seed = 12345; const rnd = () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    const N = 30000; let hit = 0; const e = new Array(k);
+    for (let n = 0; n < N; n++) {
+      for (let i = 0; i < k; i++) { const u = rnd() || 1e-12, v = rnd(); e[i] = Math.sqrt(-2 * Math.log(u)) * Math.cos(6.283185307 * v); }
+      let all = true;
+      for (let i = 0; i < k && all; i++) { let x = 0; for (let t = 0; t <= i; t++) x += L[i][t] * e[t]; if (x > z[i]) all = false; }
+      if (all) hit++;
+    }
+    return { p: hit / N, usedCorr, sameGameNoCorr, indep: ps.reduce((m, x) => m * x, 1) };
+  }
+  const slipStatus = (sl) => {
+    if (sl.status_override && sl.status_override !== 'auto') return sl.status_override;
+    const ps = (sl.legs || []).map((id) => picks.find((p) => p.id === id));
+    if (ps.some((p) => p && p.status === 'lost')) return 'lost';
+    if (ps.length && ps.every((p) => p && p.status === 'won')) return 'won';
+    return 'pending';
+  };
+  const slipPL = (sl) => { const st = slipStatus(sl), stake = Number(sl.stake) || 0; return st === 'won' ? stake * (dec(sl.odds) - 1) : st === 'lost' ? -stake : 0; };
+  const SLATE_NAME = { tnf: 'Thursday Night Football', sunday: 'Sunday game day', snf: 'Sunday Night Football', mnf: 'Monday Night Football', turf: 'Live from research' };
+  const hourFmt = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/Toronto' });
+  const dayFmt = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'America/Toronto' });
+  function slateFor(g) {
+    if (!g || !g.kickoff) return 'turf';
+    const d = new Date(g.kickoff); if (isNaN(d)) return 'turf';
+    const day = dayFmt.format(d);
+    if (day === 'Sun') return Number(hourFmt.format(d)) >= 19 ? 'snf' : 'sunday';
+    return day === 'Thu' ? 'tnf' : day === 'Mon' ? 'mnf' : 'turf';
+  }
+  // A team's sky glow: its primary color, or its secondary when the primary is too dark to light a night sky.
+  function glow(abbr) {
+    const c = TEAMS[abbr]; if (!c) return 'rgba(60,90,200,.45)';
+    const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const lum = (h) => { const [r, g, b] = rgb(h); return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255; };
+    const pick = lum(c[0]) < 0.12 && lum(c[1]) < 0.9 ? c[1] : c[0];
+    const [r, g, b] = rgb(pick);
+    return 'rgba(' + r + ',' + g + ',' + b + ',.55)';
+  }
+
+  // ---- Night sky: random twinkling stars, fireworks in both teams' colors; MNF adds sweeping stadium searchlights ----
+  const Sky = (() => {
+    const cv = document.getElementById('sky'), cx = cv.getContext('2d');
+    const still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let W = 0, H = 0, dpr = 1, stars = [], sparks = [], rockets = [], mode = null, colors = ['#ffffff'], accent = '#ffd84d', nextLaunch = 0, raf = 0, t0 = 0;
+    function size() {
+      dpr = Math.min(2, window.devicePixelRatio || 1);
+      W = window.innerWidth; H = window.innerHeight;
+      cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const n = Math.round((W * H) / 2200);
+      stars = Array.from({ length: n }, () => ({
+        x: Math.random() * W, y: Math.pow(Math.random(), 1.6) * H * 0.95,      // denser near the top of the sky
+        r: Math.random() < 0.92 ? 0.3 + Math.random() * 0.8 : 1.1 + Math.random() * 0.9,
+        a: 0.35 + Math.random() * 0.65, ph: Math.random() * Math.PI * 2, sp: 0.4 + Math.random() * 1.8,
+        tint: Math.random() < 0.15 ? (Math.random() < 0.5 ? '205,220,255' : '255,236,205') : '255,255,255'
+      }));
+    }
+    function launch() {
+      const x = W * (0.12 + Math.random() * 0.76);
+      rockets.push({ x, y: mode === 'tnf' ? H * 0.78 : H + 10, vx: (Math.random() - 0.5) * 0.6, vy: -(H * (0.011 + Math.random() * 0.006)), peak: H * (0.12 + Math.random() * 0.3), col: colors[Math.floor(Math.random() * colors.length)] });
+    }
+    function burst(x, y, col) {
+      const n = 70 + Math.floor(Math.random() * 50), second = colors[Math.floor(Math.random() * colors.length)];
+      const pow = 2.2 + Math.random() * 2.4, ring = Math.random() < 0.35;
+      for (let i = 0; i < n; i++) {
+        const ang = (i / n) * Math.PI * 2 + Math.random() * 0.2, v = ring ? pow : pow * (0.35 + Math.random() * 0.75);
+        sparks.push({ x, y, vx: Math.cos(ang) * v, vy: Math.sin(ang) * v, life: 1, decay: 0.008 + Math.random() * 0.01, col: Math.random() < 0.7 ? col : second, glit: Math.random() < 0.25 });
+      }
+    }
+    function drawStars(t) {
+      for (const s of stars) {
+        const a = still ? s.a : s.a * (0.55 + 0.45 * Math.sin(t * 0.001 * s.sp + s.ph));
+        cx.fillStyle = 'rgba(' + s.tint + ',' + a.toFixed(3) + ')';
+        cx.beginPath(); cx.arc(s.x, s.y, s.r, 0, Math.PI * 2); cx.fill();
+      }
+    }
+    let beamCols = ['255,236,190', '255,236,190', '255,236,190'], meteors = [], nextMeteor = 0, confetti = [];
+    function drawStadium(t) {
+      // stadium bowl silhouette on the horizon with a gold rim of light, and four light towers
+      const baseY = H + 4, bowlW = Math.min(W * 0.9, 1100), bx = W / 2, top = H - Math.min(120, H * 0.16);
+      cx.save();
+      const rim = cx.createRadialGradient(bx, top + 40, 10, bx, top + 40, bowlW * 0.6);
+      rim.addColorStop(0, 'rgba(255,226,150,.16)'); rim.addColorStop(1, 'rgba(255,226,150,0)');
+      cx.fillStyle = rim; cx.fillRect(0, top - 140, W, H - top + 140);
+      cx.fillStyle = 'rgba(6,5,18,.96)';
+      cx.beginPath(); cx.moveTo(bx - bowlW / 2, baseY);
+      cx.bezierCurveTo(bx - bowlW / 2, top, bx + bowlW / 2, top, bx + bowlW / 2, baseY); cx.closePath(); cx.fill();
+      cx.strokeStyle = 'rgba(255,224,150,.55)'; cx.lineWidth = 1.5; cx.beginPath();
+      cx.moveTo(bx - bowlW / 2 + 6, baseY); cx.bezierCurveTo(bx - bowlW / 2 + 6, top + 6, bx + bowlW / 2 - 6, top + 6, bx + bowlW / 2 - 6, baseY); cx.stroke();
+      [-0.46, -0.2, 0.2, 0.46].forEach((f, i) => {
+        const px = bx + f * bowlW, py = top - 34 - (i % 2) * 10;
+        cx.strokeStyle = 'rgba(20,18,40,1)'; cx.lineWidth = 3; cx.beginPath(); cx.moveTo(px, baseY); cx.lineTo(px, py + 8); cx.stroke();
+        const flick = 0.85 + 0.15 * Math.sin(t * 0.004 + i);
+        const g = cx.createRadialGradient(px, py, 1, px, py, 18);
+        g.addColorStop(0, 'rgba(255,250,230,' + (0.5 * flick) + ')'); g.addColorStop(1, 'rgba(255,236,180,0)');
+        cx.globalCompositeOperation = 'lighter'; cx.fillStyle = g; cx.beginPath(); cx.arc(px, py, 18, 0, Math.PI * 2); cx.fill(); cx.globalCompositeOperation = 'source-over';
+        cx.fillStyle = 'rgba(255,248,226,.8)'; cx.fillRect(px - 6, py - 2.5, 12, 5);
+      });
+      cx.restore();
+    }
+    let clouds = [];
+    function makeClouds() {
+      clouds = Array.from({ length: Math.max(3, Math.round(W / 360)) }, (_, i) => ({
+        x: Math.random() * W, y: H * (0.08 + Math.random() * 0.6), s: 0.7 + Math.random() * 0.7,
+        v: 0.05 + Math.random() * 0.08, a: 0.22 + Math.random() * 0.16,
+        puffs: Array.from({ length: 5 }, (_, k) => [(k - 2) * 26 + Math.random() * 10, -Math.random() * 16 - (k % 4 ? 10 : 0), 22 + Math.random() * 16])
+      }));
+    }
+    function drawClouds() {
+      cx.save(); cx.filter = 'blur(7px)';
+      for (const c of clouds) {
+        if (!still) { c.x += c.v; if (c.x - 120 * c.s > W) c.x = -120 * c.s; }
+        cx.globalAlpha = c.a; cx.fillStyle = '#ffffff';
+        cx.beginPath();
+        for (const [dx, dy, r] of c.puffs) { cx.moveTo(c.x + dx * c.s + r * c.s, c.y + dy * c.s); cx.arc(c.x + dx * c.s, c.y + dy * c.s, r * c.s, 0, Math.PI * 2); }
+        cx.fill();
+        cx.globalAlpha = c.a * 0.5; cx.fillStyle = '#dbe8f6';
+        cx.fillRect(c.x - 62 * c.s, c.y + 4 * c.s, 124 * c.s, 8 * c.s);
+      }
+      cx.restore();
+    }
+    function drawTurf() {
+      // a strip of field at the bottom of the screen: mowed stripes and yard lines in perspective
+      const hz = H - Math.min(110, H * 0.13), vx = W / 2;
+      cx.save();
+      const haze = cx.createLinearGradient(0, hz - 30, 0, hz);
+      haze.addColorStop(0, 'rgba(220,236,250,0)'); haze.addColorStop(1, 'rgba(220,236,250,.55)');
+      cx.fillStyle = haze; cx.fillRect(0, hz - 30, W, 30);
+      const n = 14;
+      for (let i = -n; i < n; i++) {
+        const xa = vx + i * (W / n) * 0.55, xb = vx + (i + 1) * (W / n) * 0.55, xc = vx + (i + 1) * (W / n) * 1.6, xd = vx + i * (W / n) * 1.6;
+        cx.fillStyle = (i & 1) ? '#3b8f3d' : '#348336';
+        cx.beginPath(); cx.moveTo(xa, hz); cx.lineTo(xb, hz); cx.lineTo(xc, H); cx.lineTo(xd, H); cx.closePath(); cx.fill();
+      }
+      cx.strokeStyle = 'rgba(255,255,255,.75)'; cx.lineWidth = 1.5;
+      for (let i = -n; i <= n; i += 2) { cx.beginPath(); cx.moveTo(vx + i * (W / n) * 0.55, hz); cx.lineTo(vx + i * (W / n) * 1.6, H); cx.stroke(); }
+      cx.fillStyle = 'rgba(255,255,255,.85)'; cx.fillRect(0, hz, W, 2);
+      cx.restore();
+    }
+    function drawGrid(t) {
+      // perspective field grid on the horizon, scrolling toward the viewer, in neon cyan
+      const hz = H * 0.78, vx = W / 2;
+      cx.save(); cx.globalCompositeOperation = 'lighter';
+      const fade = cx.createLinearGradient(0, hz, 0, H);
+      fade.addColorStop(0, 'rgba(63,227,255,0)'); fade.addColorStop(1, 'rgba(63,227,255,.55)');
+      cx.strokeStyle = fade; cx.lineWidth = 1;
+      for (let i = -12; i <= 12; i++) { cx.beginPath(); cx.moveTo(vx + i * (W / 24) * 0.15, hz); cx.lineTo(vx + i * (W / 12), H); cx.stroke(); }
+      const off = (t * 0.00035) % 1;
+      for (let k = 0; k < 9; k++) {
+        const p = (k + off) / 9, y = hz + (H - hz) * p * p;
+        cx.globalAlpha = Math.min(1, p * 1.6); cx.beginPath(); cx.moveTo(0, y); cx.lineTo(W, y); cx.stroke();
+      }
+      cx.globalAlpha = 1;
+      const hl = cx.createLinearGradient(0, 0, W, 0);
+      hl.addColorStop(0, 'rgba(63,227,255,0)'); hl.addColorStop(0.5, 'rgba(160,245,255,.9)'); hl.addColorStop(1, 'rgba(63,227,255,0)');
+      cx.strokeStyle = hl; cx.lineWidth = 1.5; cx.beginPath(); cx.moveTo(0, hz); cx.lineTo(W, hz); cx.stroke();
+      cx.restore();
+    }
+    function drawLasers(t) {
+      // thin laser lines fanning up from the horizon, sweeping and pulsing
+      const hz = H * 0.78; cx.save(); cx.globalCompositeOperation = 'lighter'; cx.lineWidth = 1.2;
+      const src = [[0.18, 0], [0.5, 2.1], [0.82, 4.2]];
+      src.forEach(([fx, ph], j) => {
+        const pulse = 0.5 + 0.5 * Math.sin(t * 0.003 + ph);
+        for (let k = 0; k < 4; k++) {
+          const ang = -Math.PI / 2 + Math.sin(t * 0.0006 + ph + k * 0.5) * 0.9;
+          const col = j === 1 ? '255,216,77' : '63,227,255';
+          const x0 = W * fx, len = H;
+          const g = cx.createLinearGradient(x0, hz, x0 + Math.cos(ang) * len, hz + Math.sin(ang) * len);
+          g.addColorStop(0, 'rgba(' + col + ',' + (0.55 * pulse).toFixed(3) + ')'); g.addColorStop(1, 'rgba(' + col + ',0)');
+          cx.strokeStyle = g; cx.beginPath(); cx.moveTo(x0, hz); cx.lineTo(x0 + Math.cos(ang) * len, hz + Math.sin(ang) * len); cx.stroke();
+        }
+      });
+      cx.restore();
+    }
+    function drawConfetti() {
+      if (confetti.length < Math.min(70, W / 14) && Math.random() < 0.35) {
+        const pool = [...colors.filter((c) => c !== '#ffffff'), '#ffd76a', '#fff3c4'];
+        confetti.push({ x: Math.random() * W, y: -10, vx: (Math.random() - 0.5) * 0.4, vy: 0.4 + Math.random() * 0.7, rot: Math.random() * 6.3, vr: (Math.random() - 0.5) * 0.08, w: 3 + Math.random() * 3, h: 1.5 + Math.random() * 2, col: pool[Math.floor(Math.random() * pool.length)], sway: Math.random() * 6.3 });
+      }
+      cx.save();
+      for (let i = confetti.length - 1; i >= 0; i--) {
+        const c = confetti[i]; c.sway += 0.03; c.x += c.vx + Math.sin(c.sway) * 0.35; c.y += c.vy; c.rot += c.vr;
+        if (c.y > H * 0.8) { confetti.splice(i, 1); continue; }
+        cx.globalAlpha = 0.8 * Math.min(1, (H * 0.8 - c.y) / 80);
+        cx.translate(c.x, c.y); cx.rotate(c.rot); cx.fillStyle = c.col; cx.fillRect(-c.w / 2, -c.h / 2, c.w, Math.abs(Math.cos(c.rot * 2)) * c.h + 0.5); cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+      cx.restore();
+    }
+    const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)).join(',');
+    function drawMeteors(t) {
+      if (t > nextMeteor) { meteors.push({ x: W * (0.1 + Math.random() * 0.8), y: H * Math.random() * 0.35, vx: -(4 + Math.random() * 4), vy: 2 + Math.random() * 2, life: 1 }); nextMeteor = t + 2500 + Math.random() * 4500; }
+      cx.save(); cx.globalCompositeOperation = 'lighter'; cx.lineCap = 'round';
+      for (let i = meteors.length - 1; i >= 0; i--) {
+        const m = meteors[i]; m.x += m.vx; m.y += m.vy; m.life -= 0.015;
+        if (m.life <= 0) { meteors.splice(i, 1); continue; }
+        const g = cx.createLinearGradient(m.x, m.y, m.x - m.vx * 14, m.y - m.vy * 14);
+        g.addColorStop(0, 'rgba(255,255,255,' + m.life + ')'); g.addColorStop(1, 'rgba(255,255,255,0)');
+        cx.strokeStyle = g; cx.lineWidth = 1.6; cx.beginPath(); cx.moveTo(m.x, m.y); cx.lineTo(m.x - m.vx * 14, m.y - m.vy * 14); cx.stroke();
+      }
+      cx.restore();
+    }
+    function drawBeams(t) {
+      const beams = mode === 'snf' ? [[0.32, 1, 0.00028, 0], [0.68, -1, 0.00028, 0], [0.5, 1, 0.0002, 2.2]] : [[0.08, 1, 0.00035, 0], [0.92, -1, 0.0003, 1.7], [0.35, 1, 0.00042, 3.1]];
+      cx.save(); cx.globalCompositeOperation = 'lighter';
+      for (const [k, [bx, dir, sp, ph]] of beams.entries()) {
+        const bc = beamCols[k % beamCols.length];
+        const ang = -Math.PI / 2 + dir * (0.35 + 0.32 * Math.sin(t * sp + ph));
+        const len = H * 1.3, wdt = mode === 'snf' ? 0.05 : 0.07, ox = W * bx, oy = mode === 'snf' ? H - Math.min(120, H * 0.16) + 10 : H + 20;
+        const g = cx.createLinearGradient(ox, oy, ox + Math.cos(ang) * len, oy + Math.sin(ang) * len);
+        g.addColorStop(0, 'rgba(' + bc + ',.22)'); g.addColorStop(0.6, 'rgba(' + bc + ',.06)'); g.addColorStop(1, 'rgba(' + bc + ',0)');
+        cx.fillStyle = g; cx.beginPath(); cx.moveTo(ox, oy);
+        cx.lineTo(ox + Math.cos(ang - wdt) * len, oy + Math.sin(ang - wdt) * len);
+        cx.lineTo(ox + Math.cos(ang + wdt) * len, oy + Math.sin(ang + wdt) * len); cx.closePath(); cx.fill();
+      }
+      cx.restore();
+    }
+    function frame(t) {
+      raf = requestAnimationFrame(frame);
+      cx.clearRect(0, 0, W, H);
+      if (mode !== 'sunday') drawStars(t);
+      if (mode === 'sunday') { drawClouds(t); drawTurf(); return; }
+      if (mode === 'mnf') drawBeams(t);
+      if (mode === 'snf') drawStadium(t);
+      if (mode === 'tnf') { drawLasers(t); drawGrid(t); }
+      if (t > nextLaunch && !Sky.calm) { launch(); if (mode === 'tnf' && Math.random() < 0.3) launch(); nextLaunch = t + (mode === 'mnf' ? 1800 + Math.random() * 2600 : mode === 'snf' ? 6000 + Math.random() * 5000 : 1100 + Math.random() * 1900); }
+      cx.save(); cx.globalCompositeOperation = 'lighter';
+      for (let i = rockets.length - 1; i >= 0; i--) {
+        const r = rockets[i]; r.x += r.vx; r.y += r.vy; r.vy *= 0.985;
+        cx.fillStyle = 'rgba(255,230,180,.9)'; cx.beginPath(); cx.arc(r.x, r.y, 1.6, 0, Math.PI * 2); cx.fill();
+        cx.fillStyle = 'rgba(255,200,120,.25)'; cx.fillRect(r.x - 0.6, r.y, 1.2, 14);
+        if (r.y <= r.peak || r.vy > -1.2) { burst(r.x, r.y, r.col); rockets.splice(i, 1); }
+      }
+      for (let i = sparks.length - 1; i >= 0; i--) {
+        const p = sparks[i]; p.x += p.vx; p.y += p.vy; p.vx *= 0.985; p.vy = p.vy * 0.985 + 0.035; p.life -= p.decay;
+        if (p.life <= 0) { sparks.splice(i, 1); continue; }
+        const a = p.glit ? p.life * (Math.random() < 0.5 ? 1 : 0.2) : p.life;
+        cx.globalAlpha = Math.max(0, a); cx.fillStyle = p.col;
+        cx.beginPath(); cx.arc(p.x, p.y, 1.1 + p.life * 1.3, 0, Math.PI * 2); cx.fill();
+      }
+      cx.globalAlpha = 1; cx.restore();
+    }
+    function vivid(abbr) {
+      const c = TEAMS[abbr]; if (!c) return null;
+      const lum = (h) => { const v = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); return (0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]) / 255; };
+      const out = c.filter((h) => lum(h) > 0.12 && lum(h) < 0.95);
+      return out.length ? out : ['#ffffff'];
+    }
+    window.addEventListener('resize', () => { if (mode) { size(); if (mode === 'sunday') makeClouds(); } });
+    return {
+      set(newMode, away, home) {
+        const teamCols = [...(vivid(away) || []), ...(vivid(home) || [])];
+        accent = newMode === 'mnf' ? '#ffb020' : newMode === 'snf' ? '#ffe08a' : '#3fe3ff';
+        colors = [...teamCols, accent, '#ffffff', ...(newMode === 'mnf' ? ['#ff3b3b'] : newMode === 'tnf' ? ['#ffd84d'] : [])];
+        beamCols = newMode === 'snf' ? ['255,244,214', '255,244,214', ...(teamCols.length ? [hexRgb(teamCols[0])] : ['255,226,150'])] : newMode === 'mnf' ? ['255,236,200', '255,120,110', '255,236,200'] : ['255,236,190'];
+        const key = newMode + '|' + away + '|' + home;
+        if (key === Sky._key) return;
+        Sky._key = key;
+        mode = newMode;
+        cancelAnimationFrame(raf); sparks = []; rockets = []; confetti = []; meteors = [];
+        if (!mode) { cx.clearRect(0, 0, W, H); return; }
+        size(); if (mode === 'sunday') makeClouds();
+        if (still && mode === 'sunday') { cx.clearRect(0, 0, W, H); drawClouds(); drawTurf(); return; }
+        if (still) { cx.clearRect(0, 0, W, H); drawStars(0); if (mode === 'snf') drawStadium(0); if (mode === 'tnf') drawGrid(0); return; }
+        nextLaunch = 0; raf = requestAnimationFrame(frame);
+      }
+    };
+  })();
+  let slateChoice = 'auto';
+  try { slateChoice = localStorage.getItem('hub-slate') || 'auto'; } catch (_) {}
+  document.querySelectorAll('.slate-pick button').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.slate === slateChoice));
+    b.addEventListener('click', () => {
+      slateChoice = b.dataset.slate;
+      try { localStorage.setItem('hub-slate', slateChoice); } catch (_) {}
+      document.querySelectorAll('.slate-pick button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      render();
+    });
+  });
+  const seen = new Set(), fresh = new Set();
+  let tab = 'current';
+  const TABS = [['tab-current', 'current'], ['tab-past', 'past'], ['tab-odds', 'odds'], ['tab-record', 'record'], ['tab-td', 'td'], ['tab-ml', 'ml'], ['tab-recyd', 'recyd'], ['tab-rushyd', 'rushyd'], ['tab-passyd', 'passyd']];
+  TABS.forEach(([id, v]) => {
+    const b = $(id); if (!b) return;
+    b.addEventListener('click', () => { tab = v; TABS.forEach(([i2, v2]) => $(i2).setAttribute('aria-selected', String(v === v2))); render(); });
+  });
+  function renderBest(curWeek) {
+    const row = $('best-row'); row.replaceChildren();
+    const ids = new Set(games.filter((g) => g.week === curWeek).map((g) => g.id));
+    const edge = (p) => (p.model_pct ?? 0) - (p.book_pct ?? 0);
+    const wk = picks.filter((p) => ids.has(p.game_id));
+    const potw = wk.find((p) => p.potw) || [...wk.filter((p) => p.tier === 'best')].sort((a, b) => edge(b) - edge(a) || (a.order ?? 99) - (b.order ?? 99))[0];
+    const others = wk.filter((p) => p !== potw && p.tier === 'best').sort((a, b) => edge(b) - edge(a)).slice(0, 2);
+    row.closest('section').hidden = false;
+    if (!potw) { const e = document.createElement('div'); e.className = 'best-empty'; e.textContent = 'This week\'s pick of the week drops with Thursday night\'s research.'; row.appendChild(e); return; }
+    const g = games.find((x) => x.id === potw.game_id) || {};
+    const card = document.createElement('div'); card.className = 'potw';
+    const tag = document.createElement('span'); tag.className = 'potw-tag'; tag.textContent = '★ Pick of the week';
+    const top = document.createElement('div'); top.className = 'potw-top';
+    const main = document.createElement('div'); main.className = 'bc-main';
+    const t = document.createElement('div'); t.className = 'potw-title'; t.textContent = potw.player + ' ' + potw.bet;
+    const sub = document.createElement('div'); sub.className = 'bc-sub';
+    sub.textContent = (g.away && g.home ? (g.label ? g.label + ' · ' : '') + g.away + ' @ ' + g.home : '') + (potw.note ? ' · ' + potw.note : '');
+    main.append(t, sub);
+    const side = document.createElement('div'); side.className = 'pick-side';
+    const o = document.createElement('span'); o.className = 'odds potw-odds'; o.textContent = fmtOdds(potw.odds);
+    const pc = document.createElement('span'); pc.className = 'pcts'; pc.textContent = 'model ' + pct(potw.model_pct) + ' · book ' + pct(potw.book_pct);
+    const res = document.createElement('span'); res.className = 'res ' + (potw.status || 'pending'); res.textContent = potw.status === 'won' ? 'Won' : potw.status === 'lost' ? 'Lost' : 'Pending';
+    side.append(...(potw.odds != null ? [o] : []), ...(potw.model_pct != null || potw.book_pct != null ? [pc] : []), res);
+    top.append(badge(potw.team && TEAMS[potw.team] ? potw.team : (g.home || ''), true), main, side);
+    card.append(tag, top);
+    if (others.length) {
+      const al = document.createElement('div'); al.className = 'potw-also';
+      const lb = document.createElement('span'); lb.textContent = 'Also strong'; al.appendChild(lb);
+      others.forEach((p) => { const gg = games.find((x) => x.id === p.game_id) || {}; const it = document.createElement('span'); it.className = 'potw-also-item'; it.textContent = p.player + ' ' + p.bet + (p.odds != null ? ' ' + fmtOdds(p.odds) : '') + (gg.away ? ' · ' + gg.away + '@' + gg.home : ''); al.appendChild(it); });
+      card.appendChild(al);
+    }
+    row.appendChild(card);
+  }
+
+  function render() { renderCore(); renderOwner(); tickCountdown(); if (legs.length) updateBuilderStatsSafe(); }
+  function updateBuilderStatsSafe() { try { renderBuilderLegsOnly(); } catch (_) {} }
+  function renderBuilderLegsOnly() { if (!$('builder').hidden) renderBuilder(); }
+  function renderCore() {
+    const won = picks.filter((p) => p.status === 'won').length;
+    const lost = picks.filter((p) => p.status === 'lost').length;
+    $('t-won').textContent = won; $('t-lost').textContent = lost; $('t-pend').textContent = picks.length - won - lost;
+    $('t-pct').textContent = won + lost ? Math.round(100 * won / (won + lost)) + '%' : '–';
+    document.querySelector('.pill.rec .rp').hidden = !(picks.length - won - lost);
+
+    const order = [...games].sort((a, b) => (STATUS_ORDER[a.status] ?? 1) - (STATUS_ORDER[b.status] ?? 1) || String(a.kickoff).localeCompare(String(b.kickoff)));
+    const wk = order.find((g) => g.status !== 'final') || order[0];
+    const auto = slateFor(wk);
+    const slate = slateChoice === 'auto' ? auto : slateChoice;
+    $('hub').dataset.slate = slate;
+    // Colors come from the next game of the slate being shown (e.g. MNF preview uses the Monday game, not Thursday's)
+    const lit = slate === auto ? wk : (order.find((g) => g.status !== 'final' && slateFor(g) === slate) || [...order].reverse().find((g) => slateFor(g) === slate) || wk);
+    if (lit) { $('hub').style.setProperty('--glow-away', glow(lit.away)); $('hub').style.setProperty('--glow-home', glow(lit.home)); }
+    Sky.calm = games.some((g) => g.status === 'live');
+    Sky.set(['tnf', 'snf', 'mnf', 'sunday'].includes(slate) ? slate : null, lit && lit.away, lit && lit.home);
+    $('week-label').textContent = (wk && wk.week ? 'NFL ' + wk.week + ' · ' : 'NFL · ') + SLATE_NAME[slate];
+
+    const teams = []; order.filter((g) => g.status !== 'final').forEach((g) => { [g.away, g.home].forEach((t) => { if (t && !teams.includes(t)) teams.push(t); }); });
+    fillFlowOnce(teams.length ? teams : order.flatMap((g) => [g.away, g.home]).filter(Boolean));
+
+    renderBest(wk && wk.week);
+    const curWeek = wk && wk.week;
+    $('hub').dataset.tab = tab;
+    $('sync').textContent = tab === 'odds' ? 'FanDuel price when I posted each pick vs. the price at kickoff.' : tab === 'record' ? 'Every settled pick, losses included, and whether the model\'s hit rates hold up.' : tab === 'td' ? 'Our touchdown picks, ranked by the model\'s chance they score.' : tab === 'ml' ? 'Win, cover and over/under chances for every game, from our game sim.' : tab === 'recyd' ? 'Over and under hit rates on FanDuel\'s receiving yards lines.' : tab === 'rushyd' ? 'Over and under hit rates on FanDuel\'s rushing yards lines.' : tab === 'passyd' ? 'Over and under hit rates on FanDuel\'s passing yards lines.' : (DB ? 'Live · new picks pop in automatically' : 'Connecting to the picks board…');
+    if (tab === 'odds') { renderOdds($('games')); return; }
+    if (tab === 'record') { renderRecord($('games')); return; }
+    if (tab === 'td') { renderTD($('games'), curWeek); return; }
+    if (tab === 'ml') { renderWin($('games'), curWeek); return; }
+    if (['recyd', 'rushyd', 'passyd'].includes(tab)) { renderYards($('games'), curWeek, tab); return; }
+    let shown = tab === 'current' ? order.filter((g) => g.week === curWeek) : order.filter((g) => g.week !== curWeek).sort((a, b) => String(b.kickoff).slice(0, 10).localeCompare(String(a.kickoff).slice(0, 10)) || String(a.kickoff).localeCompare(String(b.kickoff)));
+    if (tab === 'current' && slate === 'sunday') shown = shown.filter((g) => slateFor(g) !== 'tnf');   // Sunday look: no Thursday game
+    const box = $('games'); box.replaceChildren();
+    if (!shown.length && order.length) {
+      const e = document.createElement('div'); e.className = 'empty';
+      const s2 = document.createElement('strong'); s2.textContent = tab === 'past' ? 'No past weeks yet' : 'Nothing scheduled this week';
+      e.append(s2, document.createTextNode(tab === 'past' ? 'Finished weeks and their results land here.' : 'Games appear here when the next slate is added.'));
+      box.appendChild(e); return;
+    }
+    if (!order.length) {
+      const e = document.createElement('div'); e.className = 'empty';
+      const s = document.createElement('strong'); s.textContent = 'No games on the board yet';
+      e.append(s, document.createTextNode('Games and picks appear here as soon as research runs for the next slate.'));
+      box.appendChild(e); return;
+    }
+    const gameCard = (g) => {
+      const card = document.createElement('article'); card.className = 'game';
+      const head = document.createElement('div'); head.className = 'game-head';
+      const mu = document.createElement('div'); mu.className = 'matchup';
+      const at = document.createElement('span'); at.className = 'at'; at.textContent = '@';
+      mu.append(badge(g.away, true), at, badge(g.home, true));
+      const meta = document.createElement('div'); meta.className = 'game-meta';
+      const kick = document.createElement('span'); kick.className = 'kick';
+      const d = g.kickoff ? new Date(g.kickoff) : null;
+      kick.textContent = (g.label ? g.label + ' · ' : '') + (d && !isNaN(d) ? (g.status === 'final' ? dateFmt : kickFmt).format(d) : '');
+      const st = document.createElement('span'); st.className = 'status ' + (g.status || 'upcoming'); st.textContent = g.status === 'final' ? 'Final' + (g.score ? ' ' + g.score : '') : g.status === 'live' ? 'Live' + (g.score ? ' ' + g.score : '') + (g.clock ? ' · ' + g.clock : '') : 'Upcoming';
+      meta.append(kick, st);
+      let wxText = '';
+      if (g.weather && g.status !== 'final') {
+        const w = g.weather, wx = { set textContent(v) { wxText = v; }, set title(v) {} };
+        wx.textContent = w.dome ? (w.note || 'Indoors') : [w.temp != null ? Math.round(w.temp) + '°C' : null, w.cond || null, w.wind != null ? 'wind ' + Math.round(w.wind) + ' km/h' : null, w.precip != null ? w.precip + '% precip' : null].filter(Boolean).join(' · ');
+        if (w.asof) wx.title = 'Forecast ' + w.asof;
+      }
+      head.append(mu, meta);
+
+      let starsBox = null;
+      if (g.stars && (g.stars.away || g.stars.home)) {
+        starsBox = document.createElement('div'); starsBox.className = 'stars';
+        const lb = document.createElement('div'); lb.className = 'stars-label'; lb.textContent = 'Players to watch';
+        const cols = document.createElement('div'); cols.className = 'stars-cols';
+        [['away', g.away], ['home', g.home]].forEach(([side, abbr]) => {
+          const col = document.createElement('div'); col.className = 'stars-team';
+          const th = document.createElement('div'); th.className = 'stars-team-head'; th.append(badge(abbr, true), document.createTextNode(abbr || ''));
+          col.appendChild(th);
+          const tc = TEAMS[abbr] ? (TEAMS[abbr].find((h) => { const v = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); const l = (0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]) / 255; return l > 0.08 && l < 0.92; }) || TEAMS[abbr][0]) : null;
+          (g.stars[side] || []).forEach((pl) => {
+            const r = document.createElement('div'); r.className = 'star'; if (tc) r.style.setProperty('--tc', tc);
+            const n = document.createElement('div'); n.className = 'star-name'; n.textContent = pl.name;
+            if (pl.pos) { const ps = document.createElement('span'); ps.className = 'star-pos'; ps.textContent = pl.pos; n.appendChild(ps); }
+            const ln = document.createElement('div'); ln.className = 'star-line'; ln.textContent = pl.line || '';
+            r.append(n, ln); col.appendChild(r);
+          });
+          cols.appendChild(col);
+        });
+        starsBox.append(lb, cols);
+        if (g.stars.src) { const sc = document.createElement('div'); sc.className = 'stars-src'; sc.textContent = g.stars.src; starsBox.appendChild(sc); }
+      }
+      let info = null;
+      if (starsBox || wxText) {
+        info = document.createElement('details'); info.className = 'ginfo';
+        const ik = 'gi:' + g.id; info.open = openDrops.has(ik);
+        info.addEventListener('toggle', () => { info.open ? openDrops.add(ik) : openDrops.delete(ik); });
+        const sm = document.createElement('summary');
+        const l1 = document.createElement('span'); l1.textContent = starsBox ? 'Game info · players to watch' : 'Game info';
+        const l2 = document.createElement('span'); l2.className = 'ginfo-wx'; l2.textContent = wxText;
+        sm.append(l1, l2); info.appendChild(sm);
+        if (starsBox) { starsBox.querySelector('.stars-label').remove(); info.appendChild(starsBox); }
+      }
+      const ul = document.createElement('ul'); ul.className = 'picks';
+      const gp = picks.filter((p) => p.game_id === g.id).sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+      if (!gp.length) {
+        const li = document.createElement('li'); li.className = 'no-picks'; li.textContent = 'Research in progress. Picks will pop up here.'; ul.appendChild(li);
+      }
+      gp.forEach((p) => {
+        const isNew = prevSeen && p.created && String(p.created) > prevSeen && (p.status || 'pending') === 'pending';
+        const li = document.createElement('li'); li.className = 'pick ' + (p.tier || '') + (fresh.has(p.id) ? ' pop' : '') + (isNew ? ' is-new' : '');
+        const main = document.createElement('div'); main.className = 'pick-main';
+        const tier = document.createElement('div'); tier.className = 'tier'; tier.textContent = (TIER[p.tier] || 'Pick') + (p.on_slip ? ' · on your slip' : '');
+        const title = document.createElement('div'); title.className = 'pick-title'; title.textContent = p.player + ' ' + p.bet;
+        if (isNew) { const nt = document.createElement('span'); nt.className = 'new-tag'; nt.textContent = 'NEW'; title.appendChild(nt); }
+        main.append(tier, title);
+        if (p.note) { const n = document.createElement('div'); n.className = 'pick-note'; n.textContent = p.note; main.appendChild(n); }
+        const side = document.createElement('div'); side.className = 'pick-side';
+        const odds = document.createElement('span'); odds.className = 'odds'; odds.textContent = fmtOdds(p.odds);
+        const pc = document.createElement('span'); pc.className = 'pcts'; pc.textContent = 'model ' + pct(p.model_pct) + ' · book ' + pct(p.book_pct);
+        const res = document.createElement('span'); res.className = 'res ' + (p.status || 'pending'); res.textContent = p.status === 'won' ? 'Won' : p.status === 'lost' ? 'Lost' : 'Pending';
+        const canAdd = g.status !== 'final' && (p.status || 'pending') === 'pending' && legProb(p) != null;
+        const addB = document.createElement('button'); addB.type = 'button'; addB.className = 'add-leg';
+        const inSlip = legs.includes(p.id); addB.setAttribute('aria-pressed', String(inSlip)); addB.textContent = inSlip ? '✓' : '+'; addB.setAttribute('aria-label', (inSlip ? 'Remove ' : 'Add ') + p.player + (inSlip ? ' from' : ' to') + ' slip builder'); addB.title = 'Slip builder';
+        addB.addEventListener('click', () => { const i = legs.indexOf(p.id); if (i >= 0) legs.splice(i, 1); else legs.push(p.id); render(); renderBuilder(); });
+        side.append(...(p.odds == null || p.odds === '' ? [] : [odds]), ...(p.model_pct == null && p.book_pct == null ? [] : [pc]), res, ...(canAdd ? [addB] : []));
+        li.append(main, side);
+        // extras: live progress, recent hit rate, odds movement
+        const ex = document.createElement('div'); ex.className = 'pick-extra';
+        if (p.prog && p.prog.line != null && p.prog.cur != null) {
+          const pr = p.prog, cur = Number(pr.cur), line = Number(pr.line), under = pr.dir === 'under';
+          const done = g.status === 'final' || p.status === 'won' || p.status === 'lost';
+          const hitNow = under ? (done && cur <= line) : cur >= line, deadNow = under ? cur > line : (done && cur < line);
+          const box2 = document.createElement('div'); box2.className = 'prog' + (hitNow ? ' hit' : deadNow ? ' dead' : '');
+          const bar = document.createElement('div'); bar.className = 'prog-bar';
+          const fill = document.createElement('div'); fill.className = 'prog-fill'; fill.style.width = Math.max(2, Math.min(100, line > 0 ? 100 * cur / line : 100)) + '%';
+          bar.appendChild(fill);
+          const tx = document.createElement('span'); tx.className = 'prog-txt';
+          tx.textContent = (Number.isInteger(cur) ? cur : cur.toFixed(1)) + ' / ' + line + (pr.unit ? ' ' + pr.unit : '') + (hitNow ? ' ✓' : deadNow ? ' ✗' : '');
+          box2.append(bar, tx); ex.appendChild(box2);
+        }
+        if (p.hits && p.hits.of) {
+          const c = document.createElement('span'); c.className = 'chip' + (p.hits.n / p.hits.of >= 0.8 ? ' good' : p.hits.n / p.hits.of < 0.5 ? ' bad' : '');
+          c.textContent = p.hits.n + '/' + p.hits.of + ' last ' + p.hits.of; c.title = 'How often he cleared this line in his last ' + p.hits.of + ' games'; ex.appendChild(c);
+        }
+        if (p.alt && p.alt.odds != null && p.odds != null) {
+          const better = implied(p.alt.odds) < implied(p.odds) - 0.002;
+          const c = document.createElement('span'); c.className = 'chip' + (better ? ' good' : '');
+          c.textContent = better ? 'Better at ' + p.alt.book + ' ' + fmtOdds(p.alt.odds) : 'Best at FanDuel · ' + p.alt.book + ' ' + fmtOdds(p.alt.odds);
+          ex.appendChild(c);
+        }
+        if (ex.childNodes.length) li.appendChild(ex);
+        ul.appendChild(li);
+      });
+      card.append(head, ul); if (info) card.appendChild(info);
+      return card;
+    };
+    const label = (txt) => { const l = document.createElement('div'); l.className = 'games-label'; l.textContent = txt; box.appendChild(l); };
+    const feat = tab === 'current' && ['tnf', 'snf', 'mnf'].includes(slate) ? shown.find((g) => slateFor(g) === slate) : null;
+    if (tab === 'past') {
+      // finished weeks as drop-downs (newest open), each game a drop-down row with its picks inside
+      const weeks = [];
+      shown.forEach((g) => { if (!weeks.includes(g.week)) weeks.push(g.week); });
+      const rec = (ps) => { const w = ps.filter((p) => p.status === 'won').length, l = ps.filter((p) => p.status === 'lost').length; return { w, l, pct: w + l ? Math.round(100 * w / (w + l)) : null }; };
+      weeks.forEach((wk, wi) => {
+        const wg = shown.filter((g) => g.week === wk), ids = new Set(wg.map((g) => g.id));
+        const wp = picks.filter((p) => ids.has(p.game_id)), r = rec(wp);
+        const key = 'wk:' + wk;
+        const dw = document.createElement('details'); dw.className = 'drop wk-drop';
+        dw.open = openDrops.has(key) || (![...openDrops].some((k) => k.startsWith('wk:')) && wi === 0);
+        if (dw.open) openDrops.add(key);
+        dw.addEventListener('toggle', () => { dw.open ? openDrops.add(key) : openDrops.delete(key); });
+        const sm = document.createElement('summary');
+        const t = document.createElement('span'); t.className = 'drop-title'; t.textContent = wk || 'Earlier';
+        const m = document.createElement('span'); m.className = 'drop-meta'; m.textContent = wg.length + ' games · ' + wp.length + ' picks';
+        const rp = document.createElement('span'); rp.className = 'drop-rec'; rp.innerHTML = '';
+        const rw = document.createElement('b'); rw.className = 'w'; rw.textContent = r.w;
+        const rl = document.createElement('b'); rl.className = 'l'; rl.textContent = r.l;
+        rp.append(rw, document.createTextNode('–'), rl, document.createTextNode(r.pct != null ? '  ' + r.pct + '%' : ''));
+        sm.append(t, m, rp); dw.appendChild(sm);
+        const list = document.createElement('div'); list.className = 'drop-body';
+        wg.forEach((g) => {
+          const gp = picks.filter((p) => p.game_id === g.id), gr = rec(gp);
+          const gk = 'g:' + g.id;
+          const dg = document.createElement('details'); dg.className = 'drop gm-drop'; dg.open = openDrops.has(gk);
+          dg.addEventListener('toggle', () => { dg.open ? openDrops.add(gk) : openDrops.delete(gk); });
+          const gs = document.createElement('summary');
+          const mu = document.createElement('span'); mu.className = 'matchup';
+          const at = document.createElement('span'); at.className = 'at'; at.textContent = '@';
+          mu.append(badge(g.away, true), at, badge(g.home, true));
+          const info = document.createElement('span'); info.className = 'gm-info';
+          const nm = document.createElement('span'); nm.className = 'gm-name'; nm.textContent = (g.label ? g.label + ' · ' : '') + g.away + ' @ ' + g.home;
+          const sc = document.createElement('span'); sc.className = 'gm-score';
+          const d = g.kickoff ? new Date(g.kickoff) : null;
+          sc.textContent = (g.score ? 'Final ' + g.score : 'Final') + (d && !isNaN(d) ? ' · ' + dateFmt.format(d) : '');
+          info.append(nm, sc);
+          const gr2 = document.createElement('span'); gr2.className = 'drop-rec sm';
+          const a = document.createElement('b'); a.className = 'w'; a.textContent = gr.w;
+          const b2 = document.createElement('b'); b2.className = 'l'; b2.textContent = gr.l;
+          gr2.append(a, document.createTextNode('–'), b2);
+          gs.append(mu, info, gr2); dg.appendChild(gs);
+          const ul = gameCard(g).querySelector('.picks'); dg.appendChild(ul);
+          list.appendChild(dg);
+        });
+        dw.appendChild(list); box.appendChild(dw);
+      });
+      fresh.clear(); return;
+    }
+    if (tab === 'current') { const pc = parlayCard(); if (pc) box.appendChild(pc); }
+    if (!feat) { shown.forEach((g) => box.appendChild(gameCard(g))); fresh.clear(); return; }
+    const fc = gameCard(feat); fc.classList.add('feature');
+    const tag = document.createElement('div'); tag.className = 'feat-tag'; tag.textContent = SLATE_NAME[slate];
+    fc.querySelector('.game-meta').prepend(tag);
+    { const d = feat.kickoff ? new Date(feat.kickoff) : null; if (d && !isNaN(d)) fc.querySelector('.kick').textContent = kickFmt.format(d); }
+    box.appendChild(fc);
+    if (slate === 'tnf') {
+      const rest = shown.filter((g) => g !== feat);
+      if (rest.length) { label('Rest of ' + (curWeek || 'the week')); rest.forEach((g) => box.appendChild(gameCard(g))); }
+    } else if (slate === 'snf') {
+      const mn = shown.find((g) => slateFor(g) === 'mnf' && g !== feat);
+      if (mn) { label('Up next · Monday Night Football'); box.appendChild(gameCard(mn)); }
+    } else if (slate === 'mnf') {
+      label((curWeek || 'This week') + ' so far');
+      box.appendChild(weekSoFar(curWeek, feat));
+    }
+    fresh.clear();
+  }
+
+  function weekSoFar(week, feat) {
+    const wkGames = games.filter((g) => g.week === week);
+    const ids = new Set(wkGames.map((g) => g.id));
+    const wp = picks.filter((p) => ids.has(p.game_id));
+    const w = wp.filter((p) => p.status === 'won'), l = wp.filter((p) => p.status === 'lost');
+    const box = document.createElement('section'); box.className = 'wk';
+    // 1) record
+    const a = document.createElement('div');
+    const h1 = document.createElement('h3'); h1.textContent = 'Picks record';
+    const rec = document.createElement('div'); rec.className = 'wk-rec';
+    const ws = document.createElement('span'); ws.className = 'w'; ws.textContent = w.length;
+    const ls = document.createElement('span'); ls.className = 'l'; ls.textContent = l.length;
+    rec.append(ws, document.createTextNode('–'), ls);
+    const sub = document.createElement('div'); sub.className = 'wk-sub';
+    const pend = wp.length - w.length - l.length;
+    sub.textContent = wp.length ? (w.length + l.length ? Math.round(100 * w.length / (w.length + l.length)) + '% hit rate' : 'No results yet') + (pend ? ' · ' + pend + ' pending' : '') : 'No picks logged yet';
+    a.append(h1, rec, sub);
+    // 2) biggest hit
+    const b = document.createElement('div');
+    const h2 = document.createElement('h3'); h2.textContent = 'Biggest hit';
+    const big = [...w].sort((x, y) => Number(y.odds || -9999) - Number(x.odds || -9999))[0];
+    const bt = document.createElement('div'); bt.className = 'star-name';
+    const bs = document.createElement('div'); bs.className = 'wk-sub';
+    if (big) { bt.textContent = big.player + ' ' + big.bet; bs.textContent = fmtOdds(big.odds) + ' · model ' + pct(big.model_pct); }
+    else { bt.textContent = 'Nothing cashed yet'; bs.textContent = 'Fills in as picks settle'; }
+    b.append(h2, bt, bs);
+    // 3) final scores
+    const c = document.createElement('div');
+    const h3 = document.createElement('h3'); h3.textContent = 'Final scores';
+    const ul = document.createElement('ul'); ul.className = 'wk-list';
+    const fin = wkGames.filter((g) => g.status === 'final' && g !== feat).sort((x, y) => String(x.kickoff).localeCompare(String(y.kickoff)));
+    if (!fin.length) { const li = document.createElement('li'); li.textContent = 'No finals yet'; ul.appendChild(li); }
+    fin.slice(0, 8).forEach((g) => {
+      const li = document.createElement('li');
+      const t = document.createElement('span'); t.textContent = g.away + ' @ ' + g.home;
+      const sc = document.createElement('span'); sc.className = 'mono'; sc.textContent = g.score || 'Final';
+      li.append(t, sc); ul.appendChild(li);
+    });
+    if (fin.length > 8) { const li = document.createElement('li'); li.className = 'mono'; li.textContent = '+' + (fin.length - 8) + ' more'; ul.appendChild(li); }
+    c.append(h3, ul);
+    box.append(a, b, c);
+    return box;
+  }
+
+  const isTD = (p) => /\btd\b|touchdown/i.test(p.bet || '') && !/pass/i.test(p.bet || '');
+  const isML = (p) => /moneyline|\bml\b/i.test(p.bet || '');
+  const MARKETS = {
+    td: { test: (p) => isTD(p), rec: 'TD record', hitSub: 'Anytime TDs usually price at 25–50%', unitWord: 'TD', cur: 'TD takes by hit chance', empty: 'This week\'s TD takes land here as each game\'s research runs, starting with Thursday night.', past: 'Past TD picks', strip: /^anytime td$/i },
+    ml: { test: (p) => isML(p), rec: 'Moneyline record', hitSub: 'Straight-up winners we picked', unitWord: 'moneyline', cur: 'Moneyline picks', empty: 'Moneyline picks land here as each game\'s research runs.', past: 'Past moneyline picks', strip: /^moneyline$/i }
+  };
+  function renderTD(box, curWeek) { renderMarket(box, curWeek, 'td'); }
+  function renderMarket(box, curWeek, mk) {
+    const M = MARKETS[mk];
+    box.replaceChildren();
+    const all = picks.filter(M.test).map((p) => ({ p, g: games.find((x) => x.id === p.game_id) || {} }));
+    const settled = all.filter((r) => r.p.status === 'won' || r.p.status === 'lost');
+    const w = settled.filter((r) => r.p.status === 'won').length, l = settled.length - w;
+    const priced = settled.filter((r) => r.p.odds != null);
+    const units = priced.reduce((m, r) => m + (r.p.status === 'won' ? dec(r.p.odds) - 1 : -1), 0);
+    const wrap = document.createElement('div'); wrap.style.gridColumn = '1 / -1'; wrap.style.display = 'grid'; wrap.style.gap = '12px';
+    const tiles = document.createElement('div'); tiles.className = 'pl-row'; tiles.style.marginTop = '0';
+    const tile = (lab, val, sub, cls) => { const d = document.createElement('div'); d.className = 'pl-tile'; const a = document.createElement('span'); a.textContent = lab; const b = document.createElement('b'); b.textContent = val; if (cls) b.className = cls; const c = document.createElement('small'); c.textContent = sub; d.append(a, b, c); tiles.appendChild(d); };
+    tile(M.rec, w + '–' + l, settled.length + ' settled ' + M.unitWord + ' picks');
+    tile('Hit rate', settled.length ? Math.round(100 * w / settled.length) + '%' : '–', M.hitSub, settled.length && w / settled.length >= 0.5 ? 'good' : '');
+    if (mk === 'td') tile('This week', String(all.filter((r) => r.g.week === curWeek && (r.p.status || 'pending') === 'pending').length), 'TD picks ranked by model hit chance');
+    else tile('Units', priced.length ? (units >= 0 ? '+' : '') + units.toFixed(2) + 'u' : '–', '1 unit on each priced ' + M.unitWord + ' pick (' + priced.length + ')', units > 0 ? 'good' : units < 0 ? 'bad' : '');
+    wrap.appendChild(tiles);
+    // this week's TD takes, favourites first, then by model edge
+    const cur = all.filter((r) => r.g.week === curWeek && (r.p.status || 'pending') === 'pending')
+      .sort((a, b) => mk === 'td' ? (b.p.model_pct ?? 0) - (a.p.model_pct ?? 0) : (b.p.fav ? 1 : 0) - (a.p.fav ? 1 : 0) || ((b.p.model_pct ?? 0) - (b.p.book_pct ?? 0)) - ((a.p.model_pct ?? 0) - (a.p.book_pct ?? 0)) || (b.p.model_pct ?? 0) - (a.p.model_pct ?? 0));
+    const h1 = document.createElement('div'); h1.className = 'games-label'; h1.style.margin = '6px 0 -4px'; h1.textContent = M.cur + ' · ' + (curWeek || 'this week'); wrap.appendChild(h1);
+    const board = mk === 'td' ? games.filter((g) => g.week === curWeek && Array.isArray(g.tdboard)).flatMap((g) => g.tdboard.map((x) => ({ ...x, g }))).sort((a, b) => b.pct - a.pct) : [];
+    if (board.length) {
+      h1.textContent = 'Every player · chance to score · ' + (curWeek || 'this week');
+      const picked = new Set(cur.map((r) => r.p.player));
+      const mkRow = (x, i) => {
+        const r = document.createElement('div'); r.className = 'tdb' + (picked.has(x.player) ? ' pk' : '');
+        const rk = document.createElement('span'); rk.className = 'tdb-rk'; rk.textContent = i + 1;
+        const nm = document.createElement('span'); nm.className = 'tdb-nm';
+        const b1 = document.createElement('b'); b1.textContent = x.player + (picked.has(x.player) ? ' ★' : '');
+        const sm = document.createElement('small'); sm.textContent = (x.pos ? x.pos + ' · ' : '') + x.g.away + ' @ ' + x.g.home;
+        nm.append(b1, sm);
+        const bar = document.createElement('span'); bar.className = 'tdb-bar'; const fl = document.createElement('i'); fl.style.width = Math.round(x.pct * 100) + '%'; bar.appendChild(fl);
+        const pc = document.createElement('span'); pc.className = 'tdb-pc'; pc.textContent = Math.round(x.pct * 100) + '%';
+        r.append(rk, badge(x.team, true), nm, bar, pc); return r;
+      };
+      const list = document.createElement('div'); list.className = 'tdb-list';
+      board.slice(0, 15).forEach((x, i) => list.appendChild(mkRow(x, i)));
+      wrap.appendChild(list);
+      if (board.length > 15) {
+        const more = document.createElement('details'); more.className = 'tdb-more'; more.open = openDrops.has('td:more');
+        more.addEventListener('toggle', () => { more.open ? openDrops.add('td:more') : openDrops.delete('td:more'); });
+        const ms = document.createElement('summary'); ms.textContent = 'Show all ' + board.length + ' players'; more.appendChild(ms);
+        const l2 = document.createElement('div'); l2.className = 'tdb-list'; board.slice(15).forEach((x, i) => l2.appendChild(mkRow(x, i + 15))); more.appendChild(l2);
+        wrap.appendChild(more);
+      }
+      const nt = document.createElement('div'); nt.className = 'b-note'; nt.textContent = '★ = one of our TD picks. Games show up here once their props post and the sim runs.'; wrap.appendChild(nt);
+    }
+    else if (!cur.length) { const e = document.createElement('div'); e.className = 'slips-empty'; e.textContent = M.empty; wrap.appendChild(e); }
+    else if (!board.length) {
+      const list = document.createElement('div'); list.className = 'td-list';
+      cur.forEach((r, i) => {
+        const c = document.createElement('div'); c.className = 'td-card' + (r.p.fav ? ' fav' : '');
+        const rk = document.createElement('span'); rk.className = 'bc-rank'; rk.textContent = String(i + 1);
+        const team = r.p.team && TEAMS[r.p.team] ? r.p.team : null;
+        const main = document.createElement('div'); main.className = 'td-main';
+        const t = document.createElement('div'); t.className = 'pick-title'; t.textContent = r.p.player + (r.p.fav ? '  ★' : '');
+        const sub = document.createElement('div'); sub.className = 'pick-note'; sub.textContent = r.p.bet + (r.g.away ? ' · ' + r.g.away + ' @ ' + r.g.home : '') + (r.p.note ? ' · ' + r.p.note : '');
+        main.append(t, sub);
+        const side = document.createElement('div'); side.className = 'pick-side';
+        const o = document.createElement('span'); o.className = 'odds'; o.textContent = fmtOdds(r.p.odds);
+        const pc = document.createElement('span'); pc.className = 'pcts'; pc.textContent = 'model ' + pct(r.p.model_pct) + ' · book ' + pct(r.p.book_pct);
+        if (mk === 'td') { const hp = document.createElement('span'); hp.className = 'td-hit'; hp.textContent = pct(r.p.model_pct); const hl = document.createElement('span'); hl.className = 'td-hit-l'; hl.textContent = 'to score'; side.append(hp, hl); }
+        else side.append(...(r.p.odds != null ? [o] : []), ...(r.p.model_pct != null || r.p.book_pct != null ? [pc] : []));
+        c.append(rk, ...(team ? [badge(team, true)] : []), main, side); list.appendChild(c);
+      });
+      wrap.appendChild(list);
+    }
+    // past TD picks
+    const past = settled.sort((a, b) => String(b.g.kickoff || '').localeCompare(String(a.g.kickoff || '')));
+    if (past.length) {
+      const pk = mk + ':past'; const d = document.createElement('details'); d.className = 'drop wk-drop'; d.open = openDrops.has(pk);
+      d.addEventListener('toggle', () => { d.open ? openDrops.add(pk) : openDrops.delete(pk); });
+      const sm = document.createElement('summary');
+      const tt = document.createElement('span'); tt.className = 'drop-title'; tt.textContent = M.past;
+      const mm = document.createElement('span'); mm.className = 'drop-meta'; mm.textContent = past.length + ' picks';
+      const rr = document.createElement('span'); rr.className = 'drop-rec';
+      const a1 = document.createElement('b'); a1.className = 'w'; a1.textContent = w; const a2 = document.createElement('b'); a2.className = 'l'; a2.textContent = l;
+      rr.append(a1, document.createTextNode('–'), a2); sm.append(tt, mm, rr); d.appendChild(sm);
+      const ul = document.createElement('ul'); ul.className = 'wk-list td-past';
+      past.forEach((r) => {
+        const li = document.createElement('li');
+        const left = document.createElement('span'); left.className = 'td-pl';
+        const dot = document.createElement('span'); dot.className = 'dot ' + r.p.status;
+        const nm = document.createElement('span'); nm.textContent = r.p.player + (r.p.bet && !M.strip.test(r.p.bet) ? ' ' + r.p.bet : '');
+        left.append(dot, nm);
+        const right = document.createElement('span'); right.className = 'mono'; right.textContent = (r.g.away ? r.g.away + '@' + r.g.home : '') + (r.g.week ? ' · ' + r.g.week.replace('Week ', 'Wk ') : '') + (mk !== 'td' && r.p.odds != null ? ' · ' + fmtOdds(r.p.odds) : '');
+        li.append(left, right); ul.appendChild(li);
+      });
+      d.appendChild(ul); wrap.appendChild(d);
+    }
+    if (mk === 'ml') {
+      const gl = games.filter((g) => g.week === curWeek && g.ml && g.status !== 'final').sort((a, b) => String(a.kickoff).localeCompare(String(b.kickoff)));
+      const h2 = document.createElement('div'); h2.className = 'games-label'; h2.style.margin = '6px 0 -4px'; h2.textContent = 'Model win chances · ' + (curWeek || 'this week'); wrap.appendChild(h2);
+      if (!gl.length) { const e = document.createElement('div'); e.className = 'slips-empty'; e.textContent = 'Each game\'s simulated win chance vs. FanDuel\'s moneyline shows here once the full-game sim runs for it.'; wrap.appendChild(e); }
+      else {
+        const card = document.createElement('div'); card.className = 'om';
+        const head = document.createElement('div'); head.className = 'om-row om-head ml-row';
+        ['Game', 'Model', 'FanDuel', 'Edge'].forEach((t) => { const c = document.createElement('span'); c.textContent = t; head.appendChild(c); });
+        card.appendChild(head);
+        gl.forEach((g) => {
+          [['away', g.away], ['home', g.home]].forEach(([side, abbr]) => {
+            const mp = g.ml[side + '_pct'], od = g.ml[side + '_odds'], bp = implied(od);
+            const row = document.createElement('div'); row.className = 'om-row ml-row';
+            const c1 = document.createElement('span'); c1.className = 'om-pick ml-team';
+            const t = document.createElement('b'); t.append(badge(abbr, true), document.createTextNode(' ' + abbr + (side === 'away' ? ' @ ' + g.home : ' vs ' + g.away)));
+            c1.appendChild(t);
+            const c2 = document.createElement('span'); c2.className = 'om-num'; c2.textContent = pct(mp);
+            const c3 = document.createElement('span'); c3.className = 'om-num'; c3.textContent = od != null ? fmtOdds(od) : '–';
+            const e2 = mp != null && bp != null ? (mp - bp) * 100 : null;
+            const c4 = document.createElement('span'); c4.className = 'om-num om-move ' + (e2 > 2 ? 'good' : e2 < -2 ? 'bad' : '');
+            c4.textContent = e2 == null ? '–' : (e2 >= 0 ? '+' : '') + e2.toFixed(1);
+            row.append(c1, c2, c3, c4); card.appendChild(row);
+          });
+        });
+        wrap.appendChild(card);
+      }
+    }
+    box.appendChild(wrap);
+  }
+  // ---- suggested 2-leg parlays (computed from the sims) ----
+  function parlayCard() {
+    const L = meta.parlays && Array.isArray(meta.parlays.list) ? meta.parlays.list : [];
+    const rowsP = L.map((x) => ({ x, ps: x.legs.map((id) => picks.find((p) => p.id === id)) })).filter((r) => r.ps.every((p) => p && (p.status || 'pending') === 'pending'));
+    if (!rowsP.length) return null;
+    const c = document.createElement('section'); c.className = 'parl';
+    const h = document.createElement('div'); h.className = 'parl-h'; h.textContent = 'Suggested 2-legs · highest chance both hit';
+    c.appendChild(h);
+    rowsP.forEach(({ x, ps }) => {
+      const r = document.createElement('div'); r.className = 'parl-r';
+      const t = document.createElement('span'); t.className = 'parl-legs'; t.textContent = ps.map((p) => p.player + ' ' + p.bet).join('  +  ');
+      const pc = document.createElement('b'); pc.textContent = Math.round(x.p * 100) + '%';
+      const f = document.createElement('small'); f.textContent = 'fair ' + fmtOdds(toAm(x.p));
+      const add = document.createElement('button'); add.type = 'button'; add.className = 'add-leg'; add.textContent = '+'; add.setAttribute('aria-label', 'Load into slip builder');
+      add.addEventListener('click', () => { legs.length = 0; ps.forEach((p) => legs.push(p.id)); render(); renderBuilder(); });
+      r.append(t, f, pc, add); c.appendChild(r);
+    });
+    return c;
+  }
+  // ---- record + calibration ----
+  function renderRecord(box) {
+    box.replaceChildren();
+    const done = picks.filter((p) => p.status === 'won' || p.status === 'lost').map((p) => ({ p, g: games.find((x) => x.id === p.game_id) || {} }));
+    const wrap = document.createElement('div'); wrap.style.gridColumn = '1 / -1'; wrap.style.display = 'grid'; wrap.style.gap = '12px';
+    const W = (a) => a.filter((r) => r.p.status === 'won').length;
+    const pctS = (a) => a.length ? Math.round(100 * W(a) / a.length) + '%' : '–';
+    const tiles = document.createElement('div'); tiles.className = 'pl-row'; tiles.style.marginTop = '0';
+    const tile = (lab, val, sub) => { const d = document.createElement('div'); d.className = 'pl-tile'; const a = document.createElement('span'); a.textContent = lab; const b = document.createElement('b'); b.textContent = val; const c = document.createElement('small'); c.textContent = sub; d.append(a, b, c); tiles.appendChild(d); };
+    tile('All picks', W(done) + '–' + (done.length - W(done)), pctS(done) + ' hit rate');
+    const slip = done.filter((r) => r.p.on_slip); tile('Owner\'s slip legs', W(slip) + '–' + (slip.length - W(slip)), pctS(slip) + ' hit rate');
+    const withM = done.filter((r) => r.p.model_pct != null);
+    const exp = withM.reduce((m, r) => m + Number(r.p.model_pct), 0);
+    tile('Model expected vs actual', withM.length ? Math.round(exp) + ' vs ' + W(withM) : '–', withM.length ? withM.length + ' picks with a model number' : 'Fills in as picks settle');
+    wrap.appendChild(tiles);
+    const table = (title, groups) => {
+      const card = document.createElement('div'); card.className = 'om';
+      const head = document.createElement('div'); head.className = 'om-row om-head rec-row'; [title, 'Picks', 'W–L', 'Hit %'].forEach((t) => { const c = document.createElement('span'); c.textContent = t; head.appendChild(c); }); card.appendChild(head);
+      groups.filter(([, a]) => a.length).forEach(([name, a]) => {
+        const r = document.createElement('div'); r.className = 'om-row rec-row';
+        [name, String(a.length), W(a) + '–' + (a.length - W(a)), pctS(a)].forEach((t, i) => { const c = document.createElement('span'); c.className = i ? 'om-num' : 'om-pick'; c.textContent = t; r.appendChild(c); });
+        card.appendChild(r);
+      });
+      return card;
+    };
+    const weeks = [...new Set(done.map((r) => r.g.week).filter(Boolean))].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+    const lbl = (t) => { const l = document.createElement('div'); l.className = 'games-label'; l.style.margin = '6px 0 -4px'; l.textContent = t; return l; };
+    wrap.append(lbl('By week'), table('Week', weeks.map((w) => [w, done.filter((r) => r.g.week === w)])));
+    const type = (p) => /\btd\b/i.test(p.bet) && !/pass/i.test(p.bet) ? 'Touchdowns' : /moneyline/i.test(p.bet) ? 'Moneyline' : /under/i.test(p.bet) ? 'Unders' : /rec(eiving)? yds|rec yds/i.test(p.bet) ? 'Receiving yards' : /rush/i.test(p.bet) ? 'Rushing yards' : /pass/i.test(p.bet) ? 'Passing' : /reception/i.test(p.bet) ? 'Receptions' : 'Other';
+    const types = ['Receiving yards', 'Rushing yards', 'Passing', 'Receptions', 'Touchdowns', 'Moneyline', 'Unders', 'Other'];
+    wrap.append(lbl('By bet type'), table('Type', types.map((t) => [t, done.filter((r) => type(r.p) === t)])));
+    // calibration: does a 70% pick hit ~70% of the time?
+    const B = [[0, 0.4, 'Under 40%'], [0.4, 0.55, '40–55%'], [0.55, 0.65, '55–65%'], [0.65, 0.75, '65–75%'], [0.75, 1.01, '75%+']];
+    const cal = document.createElement('div'); cal.className = 'om';
+    const ch = document.createElement('div'); ch.className = 'om-row om-head cal-row'; ['Model said', 'Picks', 'Expected', 'Actual'].forEach((t) => { const c = document.createElement('span'); c.textContent = t; ch.appendChild(c); }); cal.appendChild(ch);
+    let any = false;
+    B.forEach(([lo, hi, name]) => {
+      const a = withM.filter((r) => r.p.model_pct >= lo && r.p.model_pct < hi); if (!a.length) return; any = true;
+      const e = a.reduce((m, r) => m + Number(r.p.model_pct), 0) / a.length, act = W(a) / a.length;
+      const r = document.createElement('div'); r.className = 'om-row cal-row';
+      const c1 = document.createElement('span'); c1.className = 'om-pick'; c1.textContent = name;
+      const c2 = document.createElement('span'); c2.className = 'om-num'; c2.textContent = a.length;
+      const c3 = document.createElement('span'); c3.className = 'om-num'; c3.textContent = Math.round(e * 100) + '%';
+      const c4 = document.createElement('span'); c4.className = 'om-num om-move ' + (act >= e ? 'good' : 'bad'); c4.textContent = Math.round(act * 100) + '%';
+      r.append(c1, c2, c3, c4); cal.appendChild(r);
+    });
+    wrap.append(lbl('Model check · do the hit rates hold up?'));
+    if (any) wrap.appendChild(cal); else { const e = document.createElement('div'); e.className = 'slips-empty'; e.textContent = 'Fills in as picks with a model number settle.'; wrap.appendChild(e); }
+    const nt = document.createElement('div'); nt.className = 'b-note'; nt.textContent = 'Small samples swing a lot. The model check gets meaningful after a few hundred settled picks.'; wrap.appendChild(nt);
+    box.appendChild(wrap);
+  }
+  // ---- player search ----
+  function runSearch() {
+    const q = ($('srch').value || '').trim().toLowerCase(), out = $('srch-out');
+    if (q.length < 2) { out.hidden = true; out.replaceChildren(); return; }
+    const res = new Map();
+    const add = (name, team, line) => { const k = name.toLowerCase(); if (!k.includes(q)) return; if (!res.has(k)) res.set(k, { name, team, lines: [] }); const e = res.get(k); if (!e.team && team) e.team = team; e.lines.push(line); };
+    picks.forEach((p) => { const g = games.find((x) => x.id === p.game_id) || {}; add(p.player, p.team, (g.week ? g.week + ' · ' : '') + 'Pick: ' + p.bet + (p.odds != null ? ' ' + fmtOdds(p.odds) : '') + (p.model_pct != null ? ' · model ' + pct(p.model_pct) : '') + ((p.status && p.status !== 'pending') ? ' · ' + (p.status === 'won' ? 'Won' : 'Lost') : '')); });
+    games.forEach((g) => {
+      (g.tdboard || []).forEach((x) => add(x.player, x.team, 'TD chance: ' + Math.round(x.pct * 100) + '%'));
+      Object.entries(g.boards || {}).forEach(([mk, arr]) => { const lab = { recyd: 'rec yds', rushyd: 'rush yds', passyd: 'pass yds', rec: 'receptions' }[mk] || mk; (arr || []).forEach((x) => add(x.player, x.team, lab + ' ' + x.line + ': over ' + Math.round(x.over * 100) + '% · under ' + Math.round(x.under * 100) + '%' + (x.proj != null ? ' · proj ' + Math.round(x.proj) : ''))); });
+    });
+    out.replaceChildren();
+    if (!res.size) { const e = document.createElement('div'); e.className = 'srch-none'; e.textContent = 'No player matches yet.'; out.appendChild(e); }
+    [...res.values()].slice(0, 6).forEach((r) => {
+      const c = document.createElement('div'); c.className = 'srch-card';
+      const h = document.createElement('div'); h.className = 'srch-h'; if (r.team && TEAMS[r.team]) h.appendChild(badge(r.team, true)); const b = document.createElement('b'); b.textContent = r.name; h.appendChild(b);
+      const ul = document.createElement('ul'); r.lines.slice(0, 8).forEach((l) => { const li = document.createElement('li'); li.textContent = l; ul.appendChild(li); });
+      c.append(h, ul); out.appendChild(c);
+    });
+    out.hidden = false;
+  }
+  $('srch').addEventListener('input', runSearch);
+  function renderYards(box, curWeek, mk) {
+    box.replaceChildren();
+    const all = games.filter((g) => g.week === curWeek && g.boards && Array.isArray(g.boards[mk])).flatMap((g) => g.boards[mk].map((x) => ({ ...x, g })));
+    const wrap = document.createElement('div'); wrap.style.gridColumn = '1 / -1'; wrap.style.display = 'grid'; wrap.style.gap = '10px';
+    if (!all.length) { const e = document.createElement('div'); e.className = 'slips-empty'; e.textContent = 'Hit rates show up here once a game\'s props post and the sim runs.'; box.appendChild(e); return; }
+    let side = openDrops.has('yd:under') ? 'under' : openDrops.has('yd:over') ? 'over' : 'best';
+    const tg = document.createElement('div'); tg.className = 'tabs yd-filter';
+    [['best', 'Best side'], ['over', 'Overs'], ['under', 'Unders']].forEach(([v, l]) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = l; b.setAttribute('aria-pressed', String(side === v)); b.addEventListener('click', () => { openDrops.delete('yd:over'); openDrops.delete('yd:under'); if (v !== 'best') openDrops.add('yd:' + v); render(); }); tg.appendChild(b); });
+    wrap.appendChild(tg);
+    const val = (x) => side === 'over' ? x.over : side === 'under' ? x.under : Math.max(x.over, x.under);
+    all.sort((a, b) => val(b) - val(a));
+    const list = document.createElement('div'); list.className = 'tdb-list';
+    all.forEach((x, i) => {
+      const isOver = side === 'over' || (side === 'best' && x.over >= x.under);
+      const p = isOver ? x.over : x.under;
+      const r = document.createElement('div'); r.className = 'tdb yd';
+      const rk = document.createElement('span'); rk.className = 'tdb-rk'; rk.textContent = i + 1;
+      const nm = document.createElement('span'); nm.className = 'tdb-nm';
+      const b1 = document.createElement('b'); b1.textContent = x.player;
+      const sm = document.createElement('small'); sm.textContent = (x.pos ? x.pos + ' · ' : '') + x.g.away + ' @ ' + x.g.home + (x.proj != null ? ' · proj ' + Math.round(x.proj) : '');
+      nm.append(b1, sm);
+      const ln = document.createElement('span'); ln.className = 'yd-line ' + (isOver ? 'o' : 'u'); ln.textContent = (isOver ? 'Over ' : 'Under ') + x.line;
+      const pc = document.createElement('span'); pc.className = 'tdb-pc'; pc.textContent = Math.round(p * 100) + '%';
+      r.append(rk, badge(x.team, true), nm, ln, pc); list.appendChild(r);
+    });
+    wrap.appendChild(list);
+    const nt = document.createElement('div'); nt.className = 'b-note'; nt.textContent = 'Line = FanDuel\'s line closest to even money. Hit rate = share of simulated games that cleared it.'; wrap.appendChild(nt);
+    box.appendChild(wrap);
+  }
+  function renderWin(box, curWeek) {
+    box.replaceChildren();
+    const gl = games.filter((g) => g.week === curWeek && g.ml).sort((a, b) => String(a.kickoff).localeCompare(String(b.kickoff)));
+    const wrap = document.createElement('div'); wrap.className = 'wc-list';
+    if (!gl.length) { const e = document.createElement('div'); e.className = 'slips-empty'; e.textContent = 'Win chances show up here once the game sim runs for this week.'; box.appendChild(e); return; }
+    gl.forEach((g) => {
+      const pa = Number(g.ml.away_pct), ph = Number(g.ml.home_pct);
+      const row = document.createElement('div'); row.className = 'wc';
+      const side = (abbr, p, cls) => { const d = document.createElement('div'); d.className = 'wc-side ' + cls + (p >= 0.5 ? ' fav' : ''); const pc = document.createElement('b'); pc.textContent = Math.round(p * 100) + '%'; const ab = document.createElement('span'); ab.textContent = abbr; d.append(badge(abbr, true), ab, pc); return d; };
+      const mid = document.createElement('div'); mid.className = 'wc-mid';
+      const bar = document.createElement('div'); bar.className = 'wc-bar';
+      const fa = document.createElement('i'); fa.style.width = (pa * 100) + '%'; fa.style.background = glowSolid(g.away);
+      const fh = document.createElement('i'); fh.style.width = (ph * 100) + '%'; fh.style.background = glowSolid(g.home);
+      bar.append(fa, fh);
+      const k = document.createElement('small'); const d = g.kickoff ? new Date(g.kickoff) : null; k.textContent = (g.label ? g.label + ' · ' : '') + (d && !isNaN(d) ? kickFmt.format(d) : '');
+      if (g.rivalry) { const rv = document.createElement('span'); rv.className = 'wc-riv'; rv.textContent = g.rivalry; k.prepend(rv); }
+      mid.append(bar, k);
+      row.append(side(g.away, pa, 'a'), mid, side(g.home, ph, 'h'));
+      if (g.lines) {
+        const L = g.lines, ex = document.createElement('div'); ex.className = 'wc-ex';
+        const sp = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n);
+        const cell = (lab, a, b) => { const c = document.createElement('span'); c.className = 'wc-cell'; const l = document.createElement('i'); l.textContent = lab; const x = document.createElement('b'); x.textContent = a; const y = document.createElement('b'); y.textContent = b; c.append(l, x, y); return c; };
+        const hs = Number(L.spread_home);   // home favoured by hs (negative = home is the underdog)
+        const awayLine = sp(hs), homeLine = sp(-hs);
+        ex.append(cell('Spread', g.away + ' ' + awayLine + ' ' + Math.round(L.cover_away * 100) + '%', g.home + ' ' + homeLine + ' ' + Math.round(L.cover_home * 100) + '%'));
+        ex.append(cell('Total ' + L.total, 'Over ' + Math.round(L.over * 100) + '%', 'Under ' + Math.round(L.under * 100) + '%'));
+        row.appendChild(ex);
+      }
+      wrap.appendChild(row);
+    });
+    box.appendChild(wrap);
+  }
+  function glowSolid(abbr) { const c = TEAMS[abbr]; if (!c) return 'var(--pending)'; const lum = (h) => { const v = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); return (0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]) / 255; }; return c.find((h) => lum(h) > 0.1 && lum(h) < 0.9) || c[0]; }
+  function renderOdds(box) {
+    box.replaceChildren();
+    const rows = picks.filter((p) => p.odds != null && (p.close_odds != null || p.now_odds != null)).map((p) => {
+      const g = games.find((x) => x.id === p.game_id) || {};
+      const latest = p.close_odds != null ? p.close_odds : p.now_odds;
+      const move = (implied(latest) - implied(p.odds)) * 100;
+      return { p, g, latest, atKick: p.close_odds != null, move };
+    });
+    const wrap = document.createElement('div'); wrap.style.gridColumn = '1 / -1'; wrap.style.display = 'grid'; wrap.style.gap = '12px';
+    const tiles = document.createElement('div'); tiles.className = 'pl-row'; tiles.style.marginTop = '0';
+    const closed = rows.filter((r) => r.atKick), beat = closed.filter((r) => r.move > 0.4);
+    const tile = (lab, val, sub, cls) => { const d = document.createElement('div'); d.className = 'pl-tile'; const a = document.createElement('span'); a.textContent = lab; const b = document.createElement('b'); b.textContent = val; if (cls) b.className = cls; const c = document.createElement('small'); c.textContent = sub; d.append(a, b, c); tiles.appendChild(d); };
+    const avg = closed.length ? closed.reduce((m, r) => m + r.move, 0) / closed.length : null;
+    tile('Picks tracked', String(rows.length), closed.length + ' with a kickoff price');
+    tile('Beat the close', closed.length ? Math.round(100 * beat.length / closed.length) + '%' : '–', beat.length + ' of ' + closed.length + ' got a better price than kickoff', closed.length && beat.length / closed.length >= 0.5 ? 'good' : '');
+    tile('Average move', avg == null ? '–' : (avg >= 0 ? '+' : '') + avg.toFixed(1) + ' pts', 'Positive = the market moved our way', avg > 0.4 ? 'good' : avg < -0.4 ? 'bad' : '');
+    wrap.appendChild(tiles);
+    if (!rows.length) {
+      const e = document.createElement('div'); e.className = 'slips-empty';
+      e.textContent = 'No odds moves yet. From Week 9 on, every pick records the FanDuel price when I post it, and I re-check it at kickoff. Week 8 picks were logged before this was tracked.';
+      wrap.appendChild(e); box.appendChild(wrap); return;
+    }
+    const card = document.createElement('div'); card.className = 'om';
+    const head = document.createElement('div'); head.className = 'om-row om-head';
+    ['Pick', 'Posted', 'Kickoff', 'Move'].forEach((t) => { const c = document.createElement('span'); c.textContent = t; head.appendChild(c); });
+    card.appendChild(head);
+    rows.sort((a, b) => String(b.g.kickoff || '').localeCompare(String(a.g.kickoff || '')) || b.move - a.move).forEach((r) => {
+      const row = document.createElement('div'); row.className = 'om-row';
+      const c1 = document.createElement('span'); c1.className = 'om-pick';
+      const t = document.createElement('b'); t.textContent = r.p.player + ' ' + r.p.bet;
+      const sub = document.createElement('small'); sub.textContent = (r.g.away ? r.g.away + ' @ ' + r.g.home : '') + (r.g.week ? ' · ' + r.g.week : '') + (r.p.status && r.p.status !== 'pending' ? ' · ' + (r.p.status === 'won' ? 'Won' : 'Lost') : '');
+      c1.append(t, sub);
+      const c2 = document.createElement('span'); c2.className = 'om-num'; c2.textContent = fmtOdds(r.p.odds);
+      const c3 = document.createElement('span'); c3.className = 'om-num'; c3.textContent = fmtOdds(r.latest) + (r.atKick ? '' : ' (now)');
+      const c4 = document.createElement('span'); c4.className = 'om-num om-move ' + (r.move > 0.4 ? 'good' : r.move < -0.4 ? 'bad' : '');
+      c4.textContent = (r.move > 0.4 ? '▲ ' : r.move < -0.4 ? '▼ ' : '') + (r.move >= 0 ? '+' : '') + r.move.toFixed(1);
+      row.append(c1, c2, c3, c4); card.appendChild(row);
+    });
+    wrap.appendChild(card); box.appendChild(wrap);
+  }
+  function curWeekName() {
+    const order = [...games].sort((a, b) => String(a.kickoff).localeCompare(String(b.kickoff)));
+    const g = order.find((x) => x.status !== 'final') || order[order.length - 1];
+    return g && g.week;
+  }
+  function renderBuilder() {
+    for (let i = legs.length - 1; i >= 0; i--) { const p = picks.find((x) => x.id === legs[i]); if (!p || (p.status && p.status !== 'pending')) legs.splice(i, 1); }
+    const el = $('builder'); el.hidden = !legs.length; padForBuilder(); if (!legs.length) return;
+    const ls = legs.map((id) => picks.find((x) => x.id === id));
+    const ul = $('b-legs'); ul.replaceChildren();
+    ls.forEach((p) => {
+      const g = games.find((x) => x.id === p.game_id) || {};
+      const li = document.createElement('li');
+      const t = document.createElement('span'); t.textContent = p.player + ' ' + p.bet;
+      const r = document.createElement('span'); r.className = 'mono'; r.textContent = (g.away ? g.away + '@' + g.home + ' · ' : '') + (p.odds != null ? fmtOdds(p.odds) + ' · ' : '') + pct(legProb(p));
+      const x = document.createElement('button'); x.type = 'button'; x.textContent = '×'; x.setAttribute('aria-label', 'Remove ' + p.player);
+      x.addEventListener('click', () => { legs.splice(legs.indexOf(p.id), 1); render(); renderBuilder(); });
+      const right = document.createElement('span'); right.append(r, x); right.style.display = 'flex'; right.style.gap = '6px'; right.style.alignItems = 'center';
+      li.append(t, right); ul.appendChild(li);
+    });
+    updateBuilderStats();
+  }
+  let jpCache = { key: '', res: null };
+  function updateBuilderStats() {
+    const ls = legs.map((id) => picks.find((x) => x.id === id)).filter(Boolean);
+    const key = ls.map((p) => p.id + ':' + legProb(p)).join(',');
+    if (jpCache.key !== key) jpCache = { key, res: jointProb(ls) };
+    const jp = jpCache.res, fdOdds = parseAm($('b-odds').value);
+    const naive = ls.every((p) => p.odds != null) ? ls.reduce((m, p) => m * dec(p.odds), 1) : null;
+    const naiveAm = naive ? (naive >= 2 ? Math.round((naive - 1) * 100) : -Math.round(100 / (naive - 1))) : null;
+    if (!fdOdds) $('b-odds').placeholder = naiveAm ? fmtOdds(naiveAm) : '+250';
+    const fdP = implied(fdOdds || naiveAm);
+    const st = $('b-stats'); st.replaceChildren();
+    const tile = (lab, val, cls) => { const d = document.createElement('div'); d.className = 'b-stat'; const s1 = document.createElement('span'); s1.textContent = lab; const b = document.createElement('b'); b.textContent = val; if (cls) b.className = cls; d.append(s1, b); st.appendChild(d); };
+    tile('Model: all hit', jp ? Math.round(jp.p * 1000) / 10 + '%' : '–');
+    tile('Fair odds', jp ? fmtOdds(toAm(jp.p)) : '–');
+    if (jp && fdP) { const edge = (jp.p - fdP) * 100; tile((fdOdds ? 'Edge vs FanDuel' : 'Edge vs leg odds'), (edge >= 0 ? '+' : '') + edge.toFixed(1) + ' pts', edge >= 1 ? 'good' : edge <= -1 ? 'bad' : ''); }
+    else tile('Edge', '–');
+    const notes = [];
+    if (jp && jp.usedCorr) notes.push('Same-game legs are linked using correlations from the full-game sim.');
+    if (jp && jp.sameGameNoCorr) notes.push('Some same-game legs have no sim link posted yet, so they are treated as independent.');
+    if (!fdOdds && ls.length > 1) notes.push('Enter the FanDuel price for the edge. Same-game parlays are priced differently from multiplying the legs.');
+    $('b-note').textContent = notes.join(' ');
+    const ttl = $('b-title'); ttl.replaceChildren(document.createTextNode(ls.length === 1 ? 'Straight bet' : ls.length + '-leg parlay'));
+    if ($('builder').classList.contains('min') && jp) { const sm = document.createElement('span'); sm.className = 'b-sum'; sm.textContent = Math.round(jp.p * 100) + '% · fair ' + fmtOdds(toAm(jp.p)); ttl.appendChild(sm); }
+    const stake = Number($('b-stake').value);
+    $('b-save').disabled = !(stake > 0 && (fdOdds || naiveAm));
+    $('b-msg').textContent = stake > 0 && (fdOdds || naiveAm) ? 'To win ' + money(stake * (dec(fdOdds || naiveAm) - 1)).replace('+', '') + ' on ' + money(stake).replace('+', '') : '';
+  }
+  function padForBuilder() { const el = $('builder'); document.querySelector('.wrap').style.paddingBottom = el.hidden ? '' : (el.offsetHeight + 40) + 'px'; }
+  $('b-min').addEventListener('click', () => { const el = $('builder'), m = el.classList.toggle('min'); $('b-min').textContent = m ? 'Show' : 'Hide'; $('b-min').setAttribute('aria-expanded', String(!m)); updateBuilderStats(); padForBuilder(); });
+  $('b-odds').addEventListener('input', updateBuilderStats);
+  $('b-stake').addEventListener('input', updateBuilderStats);
+  $('b-clear').addEventListener('click', () => { legs.length = 0; render(); renderBuilder(); });
+  $('b-save').addEventListener('click', async () => {
+    const ls = legs.map((id) => picks.find((x) => x.id === id)).filter(Boolean);
+    const naive = ls.every((p) => p.odds != null) ? ls.reduce((m, p) => m * dec(p.odds), 1) : null;
+    const odds = parseAm($('b-odds').value) || (naive ? (naive >= 2 ? Math.round((naive - 1) * 100) : -Math.round(100 / (naive - 1))) : null);
+    const stake = Math.round(Number($('b-stake').value) * 100) / 100;
+    if (!DB || !odds || !(stake > 0)) { $('b-msg').textContent = DB ? 'Add a stake and odds first.' : 'Only the owner can save slips.'; return; }
+    const g0 = games.find((x) => x.id === ls[0].game_id) || {};
+    const jp = jpCache.res;
+    $('b-save').disabled = true; $('b-msg').textContent = 'Saving…';
+    try {
+      await DB.collection('slips').add({ created: new Date().toISOString(), week: g0.week || curWeekName() || '', legs: ls.map((p) => p.id), odds, stake, model_pct: jp ? Math.round(jp.p * 1000) / 1000 : null, status_override: 'auto' });
+      legs.length = 0; $('b-odds').value = ''; $('b-stake').value = ''; render(); renderBuilder();
+    } catch (e) { $('b-save').disabled = false; $('b-msg').textContent = 'Only the owner can save slips.'; }
+  });
+  function renderOwner() {
+    const sec = $('owner'); sec.hidden = !slips.length; if (!slips.length) return;
+    const units = (sl) => { const st = slipStatus(sl); return st === 'won' ? dec(sl.odds) - 1 : st === 'lost' ? -1 : 0; };
+    const settled = slips.filter((sl) => ['won', 'lost'].includes(slipStatus(sl)));
+    const w = settled.filter((sl) => slipStatus(sl) === 'won').length, u = settled.reduce((m, sl) => m + units(sl), 0);
+    $('owner-rec').textContent = settled.length ? w + '–' + (settled.length - w) + ' · ' + (u >= 0 ? '+' : '') + u.toFixed(1) + 'u' : 'New';
+    $('owner-rec').className = 'owner-rec' + (u > 0 ? ' good' : u < 0 ? ' bad' : '');
+    const sorted = [...slips].sort((a, b) => String(b.created).localeCompare(String(a.created)));
+    const row = (sl) => {
+      const st = slipStatus(sl), li = document.createElement('li'); li.className = 'orow ' + st;
+      const dot = document.createElement('span'); dot.className = 'dot ' + (st === 'void' ? 'pending' : st);
+      const legsTxt = (sl.legs || []).map((id) => { const p = picks.find((x) => x.id === id); return p ? p.player + ' ' + p.bet : '—'; }).join('  +  ');
+      const t = document.createElement('span'); t.className = 'orow-legs'; t.textContent = legsTxt; t.title = legsTxt;
+      const o = document.createElement('span'); o.className = 'orow-odds'; o.textContent = ((sl.legs || []).length > 1 ? (sl.legs || []).length + '-leg ' : '') + fmtOdds(sl.odds);
+      const r = document.createElement('span'); r.className = 'orow-res ' + st;
+      r.textContent = st === 'won' ? '+' + (dec(sl.odds) - 1).toFixed(2) + 'u' : st === 'lost' ? '−1u' : st === 'void' ? 'Void' : 'Open';
+      const more = document.createElement('button'); more.type = 'button'; more.className = 'orow-more'; more.textContent = '⋯'; more.setAttribute('aria-label', 'Edit slip');
+      more.addEventListener('click', () => {
+        if (li.querySelector('.slip-tools')) { li.querySelector('.slip-tools').remove(); return; }
+        const tools = document.createElement('div'); tools.className = 'slip-tools';
+        const sel = document.createElement('select'); sel.setAttribute('aria-label', 'Slip result');
+        [['auto', 'Result: from legs'], ['won', 'Mark won'], ['lost', 'Mark lost'], ['void', 'Mark void']].forEach(([v, l2]) => { const op = document.createElement('option'); op.value = v; op.textContent = l2; if ((sl.status_override || 'auto') === v) op.selected = true; sel.appendChild(op); });
+        sel.addEventListener('change', () => { if (DB) DB.collection('slips').doc(sl.id).update({ status_override: sel.value }).catch(() => {}); });
+        const del = document.createElement('button'); del.type = 'button'; del.className = 'b-btn'; del.textContent = 'Delete';
+        del.addEventListener('click', () => { if (del.dataset.armed) { if (DB) DB.collection('slips').doc(sl.id).delete().catch(() => {}); } else { del.dataset.armed = '1'; del.textContent = 'Tap again'; setTimeout(() => { del.dataset.armed = ''; del.textContent = 'Delete'; }, 3000); } });
+        tools.append(sel, del); li.appendChild(tools);
+      });
+      li.append(dot, t, o, r, more); return li;
+    };
+    const top = $('owner-list'); top.replaceChildren(); sorted.slice(0, 3).forEach((sl) => top.appendChild(row(sl)));
+    const rest = sorted.slice(3), all = $('owner-all'); all.replaceChildren(); rest.forEach((sl) => all.appendChild(row(sl)));
+    $('owner-more').hidden = !rest.length;
+    $('owner-more').querySelector('summary').textContent = 'All owner slips (' + slips.length + ')';
+  }
+  function tickCountdown() {
+    const el = $('countdown'), now = Date.now();
+    const live = games.find((g) => g.status === 'live');
+    if (live) { el.hidden = false; el.replaceChildren(document.createTextNode('Live now '), Object.assign(document.createElement('b'), { textContent: live.away + ' @ ' + live.home })); return; }
+    const nx = games.filter((g) => g.status !== 'final' && g.kickoff && new Date(g.kickoff).getTime() > now).sort((a, b) => new Date(a.kickoff) - new Date(b.kickoff))[0];
+    if (!nx) { el.hidden = true; return; }
+    let ms = new Date(nx.kickoff).getTime() - now; const d = Math.floor(ms / 864e5); ms -= d * 864e5; const h = Math.floor(ms / 36e5); ms -= h * 36e5; const m = Math.floor(ms / 6e4);
+    el.hidden = false;
+    el.replaceChildren(document.createTextNode(nx.away + ' @ ' + nx.home + ' in '), Object.assign(document.createElement('b'), { textContent: (d ? d + 'd ' : '') + h + 'h ' + String(m).padStart(2, '0') + 'm' }));
+  }
+  setInterval(tickCountdown, 30000);
+  const openDrops = new Set();
+  let flowKey = '';
+  function fillFlowOnce(abbrs) {
+    const key = abbrs.join(',');
+    if (key === flowKey) return;     // don't restart the drift on every update
+    flowKey = key; fillFlow(abbrs);
+  }
+
+  fillFlow([]);
+  render();
+
+  (async () => {
+    const db = await claude.use('db');
+    if (!db) { $('sync').textContent = 'Sign in to see live picks.'; return; }
+    DB = db;
+    db.collection('meta').onSnapshot((snap) => { meta = {}; snap.docs.forEach((d) => { meta[d.id] = d.data(); }); render(); }, () => {});
+    db.collection('slips').onSnapshot((snap) => { slips = snap.docs.map((d) => ({ id: d.id, ...d.data() })); renderOwner(); }, () => {});
+    $('sync').textContent = 'Live · new picks pop in automatically';
+    db.collection('games').onSnapshot((snap) => {
+      games = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      render();
+    }, () => { $('sync').textContent = 'Live updates paused. Reload to reconnect.'; });
+    db.collection('picks').onSnapshot((snap) => {
+      picks = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      picks.forEach((p) => { if (!seen.has(p.id)) { seen.add(p.id); if (!firstPicks) fresh.add(p.id); } });
+      if (firstPicks) setTimeout(() => { try { localStorage.setItem('hub-seen-at', new Date().toISOString()); } catch (_) {} }, 4000);
+      firstPicks = false;
+      render();
+    }, () => { $('sync').textContent = 'Live updates paused. Reload to reconnect.'; });
+  })();
+})();
+</script>
+</body></html>
