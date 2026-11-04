@@ -456,6 +456,7 @@
   .hub[data-sport="nba"] .home-btn b { background: #f2b705; }
   .home-btn:focus-visible { outline: 2px solid #f2b705; outline-offset: 2px; }
   @media (max-width: 520px) { .home-btn { order: -1; } }
+  .hub:not([data-sport="nba"]) #tab-combo { display: none; }
   .sport-pick { display: inline-flex; border: 1px solid var(--line, rgba(255,255,255,.14)); border-radius: 999px; padding: 3px; gap: 2px; background: rgba(0,0,0,.35); }
   .sport-pick button { font: 700 12px var(--font-mono); letter-spacing: .14em; color: var(--chalk-dim, #9aa); background: transparent; border: 0; border-radius: 999px; padding: 6px 14px; cursor: pointer; }
   .sport-pick button[aria-pressed="true"] { background: #ff7a1a; color: #111; }
@@ -552,6 +553,7 @@
   .hub.hub:not([data-tab="current"]) .games-sec { --flag: var(--tab-accent); }
   .hub.hub[data-tab="past"], .hub.hub[data-tab="odds"], .hub.hub[data-tab="record"] { --tab-accent: #ff7a1a; }
   .hub.hub[data-tab="parlay"] { --tab-accent: #ff7a1a; }
+  .hub.hub[data-tab="combo"] { --tab-accent: #f2b705; }
   .hub.hub[data-tab="td"], .hub.hub[data-tab="ml"], .hub.hub[data-tab="recyd"], .hub.hub[data-tab="rushyd"], .hub.hub[data-tab="passyd"] { --tab-accent: #f2b705; }
   .hub.hub .yd-line.o { color: var(--gold); } .hub.hub .yd-line.u { color: #e6e6e4; }
   .hub.hub .chip.good { color: var(--gold); } .hub.hub .chip.bad { color: var(--loss); }
@@ -669,6 +671,7 @@
             <button type="button" role="tab" id="tab-recyd" aria-selected="false" aria-controls="games">Rec yards</button>
             <button type="button" role="tab" id="tab-rushyd" aria-selected="false" aria-controls="games">Rush yards</button>
             <button type="button" role="tab" id="tab-passyd" aria-selected="false" aria-controls="games">Pass yards</button>
+            <button type="button" role="tab" id="tab-combo" aria-selected="false" aria-controls="games">Combos</button>
           </div>
         </div>
       </div>
@@ -1162,7 +1165,7 @@
   });
   const seen = new Set(), fresh = new Set();
   let tab = 'current';
-  const TABS = [['tab-current', 'current'], ['tab-parlay', 'parlay'], ['tab-past', 'past'], ['tab-odds', 'odds'], ['tab-record', 'record'], ['tab-td', 'td'], ['tab-ml', 'ml'], ['tab-recyd', 'recyd'], ['tab-rushyd', 'rushyd'], ['tab-passyd', 'passyd']];
+  const TABS = [['tab-current', 'current'], ['tab-parlay', 'parlay'], ['tab-past', 'past'], ['tab-odds', 'odds'], ['tab-record', 'record'], ['tab-td', 'td'], ['tab-ml', 'ml'], ['tab-recyd', 'recyd'], ['tab-rushyd', 'rushyd'], ['tab-passyd', 'passyd'], ['tab-combo', 'combo']];
   TABS.forEach(([id, v]) => {
     const b = $(id); if (!b) return;
     b.addEventListener('click', () => { tab = v; TABS.forEach(([i2, v2]) => $(i2).setAttribute('aria-selected', String(v === v2))); render(); });
@@ -1229,10 +1232,12 @@
     renderBest(wk && wk.week);
     const curWeek = wk && wk.week;
     $('hub').dataset.tab = tab;
-    $('sync').textContent = SPORT === 'nba' && ['td', 'recyd', 'rushyd', 'passyd'].includes(tab) ? 'Over and under hit rates on FanDuel\'s ' + { td: 'threes', recyd: 'points', rushyd: 'rebounds', passyd: 'assists' }[tab] + ' lines.' : tab === 'parlay' ? 'Search any player on this week\'s slate and add their lines to a parlay.' : tab === 'odds' ? 'FanDuel price when I posted each pick vs. the price at kickoff.' : tab === 'record' ? 'Every settled pick, losses included, and whether the model\'s hit rates hold up.' : tab === 'td' ? 'Our touchdown picks, ranked by the model\'s chance they score.' : tab === 'ml' ? 'Win, cover and over/under chances for every game, from our game sim.' : tab === 'recyd' ? 'Over and under hit rates on FanDuel\'s receiving yards lines.' : tab === 'rushyd' ? 'Over and under hit rates on FanDuel\'s rushing yards lines.' : tab === 'passyd' ? 'Over and under hit rates on FanDuel\'s passing yards lines.' : (DB ? 'Live · new picks pop in automatically' : 'Connecting to the picks board…');
+    $('sync').textContent = SPORT === 'nba' && tab === 'combo' ? 'Over and under hit rates on FanDuel\'s combo lines: points + rebounds + assists, points + rebounds, points + assists.' : SPORT === 'nba' && ['td', 'recyd', 'rushyd', 'passyd'].includes(tab) ? 'Over and under hit rates on FanDuel\'s ' + { td: 'threes', recyd: 'points', rushyd: 'rebounds', passyd: 'assists' }[tab] + ' lines.' : tab === 'parlay' ? 'Search any player on this week\'s slate and add their lines to a parlay.' : tab === 'odds' ? 'FanDuel price when I posted each pick vs. the price at kickoff.' : tab === 'record' ? 'Every settled pick, losses included, and whether the model\'s hit rates hold up.' : tab === 'td' ? 'Our touchdown picks, ranked by the model\'s chance they score.' : tab === 'ml' ? 'Win, cover and over/under chances for every game, from our game sim.' : tab === 'recyd' ? 'Over and under hit rates on FanDuel\'s receiving yards lines.' : tab === 'rushyd' ? 'Over and under hit rates on FanDuel\'s rushing yards lines.' : tab === 'passyd' ? 'Over and under hit rates on FanDuel\'s passing yards lines.' : (DB ? 'Live · new picks pop in automatically' : 'Connecting to the picks board…');
     if (tab === 'parlay') { renderParlay($('games'), curWeek); return; }
     if (tab === 'odds') { renderOdds($('games')); return; }
     if (tab === 'record') { renderRecord($('games')); return; }
+    if (tab === 'combo' && SPORT !== 'nba') { tab = 'current'; TABS.forEach(([i2, v2]) => $(i2).setAttribute('aria-selected', String(v2 === 'current'))); }
+    if (SPORT === 'nba' && tab === 'combo') { renderCombo($('games'), curWeek); return; }
     if (SPORT === 'nba' && ['td', 'recyd', 'rushyd', 'passyd'].includes(tab)) { renderYards($('games'), curWeek, { td: 'threes', recyd: 'pts', rushyd: 'reb', passyd: 'ast' }[tab]); return; }
     if (tab === 'td') { renderTD($('games'), curWeek); return; }
     if (tab === 'ml') { renderWin($('games'), curWeek); return; }
@@ -1783,7 +1788,7 @@
     picks.forEach((p) => { const g = games.find((x) => x.id === p.game_id) || {}; add(p.player, p.team, (g.week ? g.week + ' · ' : '') + 'Pick: ' + p.bet + (p.odds != null ? ' ' + fmtOdds(p.odds) : '') + (p.model_pct != null ? ' · model ' + pct(p.model_pct) : '') + ((p.status && p.status !== 'pending') ? ' · ' + (p.status === 'won' ? 'Won' : 'Lost') : '')); });
     games.forEach((g) => {
       (g.tdboard || []).forEach((x) => add(x.player, x.team, 'TD chance: ' + Math.round(x.pct * 100) + '%'));
-      Object.entries(g.boards || {}).forEach(([mk, arr]) => { const lab = { recyd: 'rec yds', rushyd: 'rush yds', passyd: 'pass yds', rec: 'receptions', pts: 'points', reb: 'rebounds', ast: 'assists', threes: 'threes' }[mk] || mk; (arr || []).forEach((x) => add(x.player, x.team, lab + ' ' + x.line + ': over ' + Math.round(x.over * 100) + '% · under ' + Math.round(x.under * 100) + '%' + (x.proj != null ? ' · proj ' + Math.round(x.proj) : ''))); });
+      Object.entries(g.boards || {}).forEach(([mk, arr]) => { const lab = { recyd: 'rec yds', rushyd: 'rush yds', passyd: 'pass yds', rec: 'receptions', pts: 'points', reb: 'rebounds', ast: 'assists', threes: 'threes', pra: 'pts + reb + ast', pr: 'pts + reb', pa: 'pts + ast' }[mk] || mk; (arr || []).forEach((x) => add(x.player, x.team, lab + ' ' + x.line + ': over ' + Math.round(x.over * 100) + '% · under ' + Math.round(x.under * 100) + '%' + (x.proj != null ? ' · proj ' + Math.round(x.proj) : ''))); });
     });
     out.replaceChildren();
     if (!res.size) { const e = document.createElement('div'); e.className = 'srch-none'; e.textContent = 'No player matches yet.'; out.appendChild(e); }
@@ -1796,6 +1801,15 @@
     out.hidden = false;
   }
   $('srch').addEventListener('input', runSearch);
+  let cmb = 'pra';
+  function renderCombo(box, curWeek) {
+    box.replaceChildren();
+    const bar = document.createElement('div'); bar.className = 'tabs yd-filter'; bar.style.gridColumn = '1 / -1';
+    [['pra', 'Pts + Reb + Ast'], ['pr', 'Pts + Reb'], ['pa', 'Pts + Ast']].forEach(([v, l]) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = l; b.setAttribute('aria-pressed', String(cmb === v)); b.addEventListener('click', () => { cmb = v; render(); }); bar.appendChild(b); });
+    const inner = document.createElement('div'); inner.style.gridColumn = '1 / -1'; inner.style.display = 'grid'; inner.style.gap = '10px';
+    box.append(bar, inner);
+    renderYards(inner, curWeek, cmb);
+  }
   function renderYards(box, curWeek, mk) {
     box.replaceChildren();
     const all = games.filter((g) => g.week === curWeek && g.boards && Array.isArray(g.boards[mk])).flatMap((g) => g.boards[mk].map((x) => ({ ...x, g })));
