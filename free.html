@@ -1236,6 +1236,12 @@
           const c = document.createElement('span'); c.className = 'chip' + (p.hits.n / p.hits.of >= 0.8 ? ' good' : p.hits.n / p.hits.of < 0.5 ? ' bad' : '');
           c.textContent = p.hits.n + '/' + p.hits.of + ' last ' + p.hits.of; c.title = 'How often he cleared this line in his last ' + p.hits.of + ' games'; ex.appendChild(c);
         }
+        if (p.now_odds != null && p.odds != null && p.now_odds !== p.odds && (p.status || 'pending') === 'pending') {
+          const stale = p.model_pct != null && Number(p.model_pct) < implied(p.now_odds);
+          const c = document.createElement('span'); c.className = 'chip' + (stale ? ' bad' : ' good');
+          c.textContent = 'Now ' + fmtOdds(p.now_odds) + (stale ? ' · no edge at this price' : ' · still an edge');
+          ex.appendChild(c);
+        }
         if (p.alt && p.alt.odds != null && p.odds != null) {
           const better = implied(p.alt.odds) < implied(p.odds) - 0.002;
           const c = document.createElement('span'); c.className = 'chip' + (better ? ' good' : '');
