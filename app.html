@@ -604,6 +604,22 @@
     .potw-top { display: grid !important; grid-template-columns: 40px minmax(0,1fr); gap: 10px; }
     .potw-top > .pick-side { grid-column: 2; margin-left: 0; text-align: left; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
   }
+  /* result colours: Won green, Lost red, Void blue */
+  :root { --res-win:#2fd06b; --res-loss:#ff4d4d; --res-void:#4f9dff; }
+  .hub.hub .res.won, .res.won { background: rgba(47,208,107,.16); color: var(--res-win); }
+  .hub.hub .res.lost, .res.lost { background: rgba(255,77,77,.15); color: var(--res-loss); }
+  .hub.hub .res.void, .res.void { background: rgba(79,157,255,.16); color: var(--res-void); opacity: 1; text-decoration: none; }
+  .hub.hub .pick.st-won { box-shadow: inset 3px 0 0 var(--res-win); }
+  .hub.hub .pick.st-lost { box-shadow: inset 3px 0 0 var(--res-loss); }
+  .hub.hub .pick.st-void { box-shadow: inset 3px 0 0 var(--res-void); }
+  .hub.hub .prog.hit .prog-fill, .prog.hit .prog-fill { background: var(--res-win); } .hub.hub .prog.dead .prog-fill, .prog.dead .prog-fill { background: var(--res-loss); }
+  .hub.hub .prog.void .prog-fill, .prog.void .prog-fill { background: var(--res-void); }
+  .prog.hit .prog-txt { color: var(--res-win); } .prog.dead .prog-txt { color: var(--res-loss); } .prog.void .prog-txt { color: var(--res-void); }
+  .hub.hub .pill.rec .rw, .pill.rec .rw { color: var(--res-win); } .hub.hub .pill.rec .rl, .pill.rec .rl { color: var(--res-loss); }
+  .orow-res.won { color: var(--res-win); } .orow-res.lost { color: var(--res-loss); } .orow-res.void { color: var(--res-void); }
+  .dot.won { background: var(--res-win); } .dot.lost { background: var(--res-loss); } .dot.void { background: var(--res-void); }
+  .hub.hub .wk-rec .w, .hub.hub .drop-rec .w, .hub.hub .pill.w b { color: var(--res-win); } .hub.hub .wk-rec .l, .hub.hub .drop-rec .l, .hub.hub .pill.l b { color: var(--res-loss); }
+  .slip.won { border-left-color: var(--res-win); } .slip.lost { border-left-color: var(--res-loss); } .slip.void { border-left-color: var(--res-void); }
 </style>
 
 <div class="hub" id="hub">
@@ -1312,7 +1328,7 @@
       }
       gp.forEach((p) => {
         const isNew = prevSeen && p.created && String(p.created) > prevSeen && (p.status || 'pending') === 'pending';
-        const li = document.createElement('li'); li.className = 'pick ' + (p.tier || '') + (fresh.has(p.id) ? ' pop' : '') + (isNew ? ' is-new' : '');
+        const li = document.createElement('li'); li.className = 'pick st-' + (p.status || 'pending') + ' ' + (p.tier || '') + (fresh.has(p.id) ? ' pop' : '') + (isNew ? ' is-new' : '');
         const main = document.createElement('div'); main.className = 'pick-main';
         const tier = document.createElement('div'); tier.className = 'tier'; tier.textContent = (TIER[p.tier] || 'Pick') + (p.on_slip ? ' · on your slip' : '');
         const title = document.createElement('div'); title.className = 'pick-title'; title.textContent = p.player + ' ' + p.bet;
@@ -1322,7 +1338,7 @@
         const side = document.createElement('div'); side.className = 'pick-side';
         const odds = document.createElement('span'); odds.className = 'odds'; odds.textContent = fmtOdds(p.odds);
         const pc = document.createElement('span'); pc.className = 'pcts'; pc.textContent = 'model ' + pct(p.model_pct) + ' · book ' + pct(p.book_pct);
-        const res = document.createElement('span'); res.className = 'res ' + (p.status || 'pending'); res.textContent = p.status === 'won' ? 'Won' : p.status === 'lost' ? 'Lost' : p.status === 'void' ? 'Void · did not play' : 'Pending';
+        const res = document.createElement('span'); res.className = 'res ' + (p.status || 'pending'); res.textContent = p.status === 'won' ? 'Won' : p.status === 'lost' ? 'Lost' : p.status === 'void' ? 'Void' : 'Pending';
         const canAdd = g.status !== 'final' && (p.status || 'pending') === 'pending' && legProb(p) != null;
         const addB = document.createElement('button'); addB.type = 'button'; addB.className = 'add-leg';
         const inSlip = legs.includes(p.id); addB.setAttribute('aria-pressed', String(inSlip)); addB.textContent = inSlip ? '✓' : '+'; addB.setAttribute('aria-label', (inSlip ? 'Remove ' : 'Add ') + p.player + (inSlip ? ' from' : ' to') + ' slip builder'); addB.title = 'Slip builder';
@@ -1335,7 +1351,7 @@
           const pr = p.prog, cur = Number(pr.cur), line = Number(pr.line), under = pr.dir === 'under';
           const done = g.status === 'final' || p.status === 'won' || p.status === 'lost';
           const hitNow = under ? (done && cur <= line) : cur >= line, deadNow = under ? cur > line : (done && cur < line);
-          const box2 = document.createElement('div'); box2.className = 'prog' + (hitNow ? ' hit' : deadNow ? ' dead' : '');
+          const box2 = document.createElement('div'); box2.className = 'prog' + (p.status === 'void' ? ' void' : hitNow ? ' hit' : deadNow ? ' dead' : '');
           const bar = document.createElement('div'); bar.className = 'prog-bar';
           const fill = document.createElement('div'); fill.className = 'prog-fill'; fill.style.width = Math.max(2, Math.min(100, line > 0 ? 100 * cur / line : 100)) + '%';
           bar.appendChild(fill);
@@ -1985,7 +2001,7 @@
     const sorted = [...slips].sort((a, b) => String(b.created).localeCompare(String(a.created)));
     const row = (sl) => {
       const st = slipStatus(sl), li = document.createElement('li'); li.className = 'orow ' + st;
-      const dot = document.createElement('span'); dot.className = 'dot ' + (st === 'void' ? 'pending' : st);
+      const dot = document.createElement('span'); dot.className = 'dot ' + st;
       const legsTxt = (sl.legs || []).map((id) => { const p = picks.find((x) => x.id === id) || (sl.custom_legs || []).find((x) => x.id === id); return p ? p.player + ' ' + p.bet : '—'; }).join('  +  ');
       const t = document.createElement('span'); t.className = 'orow-legs'; t.textContent = legsTxt; t.title = legsTxt;
       const o = document.createElement('span'); o.className = 'orow-odds'; o.textContent = ((sl.legs || []).length > 1 ? (sl.legs || []).length + '-leg ' : '') + fmtOdds(sl.odds);
