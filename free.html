@@ -457,6 +457,7 @@
   .home-btn:focus-visible { outline: 2px solid #f2b705; outline-offset: 2px; }
   @media (max-width: 520px) { .home-btn { order: -1; } }
   .hub:not([data-sport="nba"]) #tab-combo { display: none; }
+  .res.void { opacity: .7; text-decoration: line-through; }
   .sport-pick { display: inline-flex; border: 1px solid var(--line, rgba(255,255,255,.14)); border-radius: 999px; padding: 3px; gap: 2px; background: rgba(0,0,0,.35); }
   .sport-pick button { font: 700 12px var(--font-mono); letter-spacing: .14em; color: var(--chalk-dim, #9aa); background: transparent; border: 0; border-radius: 999px; padding: 6px 14px; cursor: pointer; }
   .sport-pick button[aria-pressed="true"] { background: #ff7a1a; color: #111; }
@@ -1191,7 +1192,7 @@
     const side = document.createElement('div'); side.className = 'pick-side';
     const o = document.createElement('span'); o.className = 'odds potw-odds'; o.textContent = fmtOdds(potw.odds);
     const pc = document.createElement('span'); pc.className = 'pcts'; pc.textContent = 'model ' + pct(potw.model_pct) + ' · book ' + pct(potw.book_pct);
-    const res = document.createElement('span'); res.className = 'res ' + (potw.status || 'pending'); res.textContent = potw.status === 'won' ? 'Won' : potw.status === 'lost' ? 'Lost' : 'Pending';
+    const res = document.createElement('span'); res.className = 'res ' + (potw.status || 'pending'); res.textContent = potw.status === 'won' ? 'Won' : potw.status === 'lost' ? 'Lost' : potw.status === 'void' ? 'Void' : 'Pending';
     side.append(...(potw.odds != null ? [o] : []), ...(potw.model_pct != null || potw.book_pct != null ? [pc] : []), res);
     top.append(badge(potw.team && TEAMS[potw.team] ? potw.team : (g.home || ''), true), main, side);
     card.append(tag, top);
@@ -1210,9 +1211,9 @@
   function renderCore() {
     const won = picks.filter((p) => p.status === 'won').length;
     const lost = picks.filter((p) => p.status === 'lost').length;
-    $('t-won').textContent = won; $('t-lost').textContent = lost; $('t-pend').textContent = picks.length - won - lost;
+    $('t-won').textContent = won; $('t-lost').textContent = lost; const pendN = picks.filter((p) => !p.status || p.status === 'pending').length; $('t-pend').textContent = pendN;
     $('t-pct').textContent = won + lost ? Math.round(100 * won / (won + lost)) + '%' : '–';
-    document.querySelector('.pill.rec .rp').hidden = !(picks.length - won - lost);
+    document.querySelector('.pill.rec .rp').hidden = !pendN;
 
     const order = [...games].sort((a, b) => (STATUS_ORDER[a.status] ?? 1) - (STATUS_ORDER[b.status] ?? 1) || String(a.kickoff).localeCompare(String(b.kickoff)));
     const wk = order.find((g) => g.status !== 'final') || order[0];
@@ -1327,7 +1328,7 @@
         const side = document.createElement('div'); side.className = 'pick-side';
         const odds = document.createElement('span'); odds.className = 'odds'; odds.textContent = fmtOdds(p.odds);
         const pc = document.createElement('span'); pc.className = 'pcts'; pc.textContent = 'model ' + pct(p.model_pct) + ' · book ' + pct(p.book_pct);
-        const res = document.createElement('span'); res.className = 'res ' + (p.status || 'pending'); res.textContent = p.status === 'won' ? 'Won' : p.status === 'lost' ? 'Lost' : 'Pending';
+        const res = document.createElement('span'); res.className = 'res ' + (p.status || 'pending'); res.textContent = p.status === 'won' ? 'Won' : p.status === 'lost' ? 'Lost' : p.status === 'void' ? 'Void · did not play' : 'Pending';
         const canAdd = g.status !== 'final' && (p.status || 'pending') === 'pending' && legProb(p) != null;
         const addB = document.createElement('button'); addB.type = 'button'; addB.className = 'add-leg';
         const inSlip = legs.includes(p.id); addB.setAttribute('aria-pressed', String(inSlip)); addB.textContent = inSlip ? '✓' : '+'; addB.setAttribute('aria-label', (inSlip ? 'Remove ' : 'Add ') + p.player + (inSlip ? ' from' : ' to') + ' slip builder'); addB.title = 'Slip builder';
