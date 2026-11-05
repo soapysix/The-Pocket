@@ -609,6 +609,8 @@
   .hub.hub .res.won, .res.won { background: rgba(47,208,107,.16); color: var(--res-win); }
   .hub.hub .res.lost, .res.lost { background: rgba(255,77,77,.15); color: var(--res-loss); }
   .hub.hub .res.void, .res.void { background: rgba(79,157,255,.16); color: var(--res-void); opacity: 1; text-decoration: none; }
+  .hub.hub .res.excluded, .res.excluded { background: #1c1e21; color: #8b8e94; }
+  .hub.hub .pick.st-excluded { box-shadow: inset 3px 0 0 #55585e; opacity: .75; }
   .hub.hub .pick.st-won { box-shadow: inset 3px 0 0 var(--res-win); }
   .hub.hub .pick.st-lost { box-shadow: inset 3px 0 0 var(--res-loss); }
   .hub.hub .pick.st-void { box-shadow: inset 3px 0 0 var(--res-void); }
@@ -1202,7 +1204,7 @@
     const side = document.createElement('div'); side.className = 'pick-side';
     const o = document.createElement('span'); o.className = 'odds potw-odds'; o.textContent = fmtOdds(potw.odds);
     const pc = document.createElement('span'); pc.className = 'pcts'; pc.textContent = 'model ' + pct(potw.model_pct) + ' · book ' + pct(potw.book_pct);
-    const res = document.createElement('span'); res.className = 'res ' + (potw.status || 'pending'); res.textContent = potw.status === 'won' ? 'Won' : potw.status === 'lost' ? 'Lost' : potw.status === 'void' ? 'Void' : 'Pending';
+    const res = document.createElement('span'); res.className = 'res ' + (potw.status || 'pending'); res.textContent = potw.status === 'won' ? 'Won' : potw.status === 'lost' ? 'Lost' : potw.status === 'void' ? 'Void' : potw.status === 'excluded' ? 'Pre-rule' : 'Pending';
     side.append(...(potw.odds != null ? [o] : []), ...(potw.model_pct != null || potw.book_pct != null ? [pc] : []), res);
     top.append(badge(potw.team && TEAMS[potw.team] ? potw.team : (g.home || ''), true), main, side);
     card.append(tag, top);
@@ -1338,7 +1340,7 @@
         const side = document.createElement('div'); side.className = 'pick-side';
         const odds = document.createElement('span'); odds.className = 'odds'; odds.textContent = fmtOdds(p.odds);
         const pc = document.createElement('span'); pc.className = 'pcts'; pc.textContent = 'model ' + pct(p.model_pct) + ' · book ' + pct(p.book_pct);
-        const res = document.createElement('span'); res.className = 'res ' + (p.status || 'pending'); res.textContent = p.status === 'won' ? 'Won' : p.status === 'lost' ? 'Lost' : p.status === 'void' ? 'Void' : 'Pending';
+        const res = document.createElement('span'); res.className = 'res ' + (p.status || 'pending'); res.textContent = p.status === 'won' ? 'Won' : p.status === 'lost' ? 'Lost' : p.status === 'void' ? 'Void' : p.status === 'excluded' ? 'Pre-rule · ' + (p.result === 'won' ? 'won' : 'lost') : 'Pending';
         const canAdd = g.status !== 'final' && (p.status || 'pending') === 'pending' && legProb(p) != null;
         const addB = document.createElement('button'); addB.type = 'button'; addB.className = 'add-leg';
         const inSlip = legs.includes(p.id); addB.setAttribute('aria-pressed', String(inSlip)); addB.textContent = inSlip ? '✓' : '+'; addB.setAttribute('aria-label', (inSlip ? 'Remove ' : 'Add ') + p.player + (inSlip ? ' from' : ' to') + ' slip builder'); addB.title = 'Slip builder';
