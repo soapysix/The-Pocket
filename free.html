@@ -2064,7 +2064,7 @@
     const sp = (g) => (g.sport || 'nfl');
     games = ALL.games.filter((g) => sp(g) === SPORT);
     const ids = new Set(games.map((g) => g.id));
-    picks = ALL.picks.filter((p) => ids.has(p.game_id));
+    picks = ALL.picks.filter((p) => ids.has(p.game_id) && p.status !== 'excluded');
     const pid = new Set(picks.map((p) => p.id));
     slips = ALL.slips.filter((sl) => (sl.sport || ((sl.legs || []).some((id) => pid.has(id)) ? SPORT : (SPORT === 'nfl' ? 'nfl' : 'x'))) === SPORT);
     MENUS = {}; Object.entries(ALL.menus).forEach(([k, v]) => { if (ids.has(k)) MENUS[k] = v; });
