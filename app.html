@@ -1228,7 +1228,10 @@
     document.querySelector('.pill.rec .rp').hidden = !pendN;
 
     const order = [...games].sort((a, b) => (STATUS_ORDER[a.status] ?? 1) - (STATUS_ORDER[b.status] ?? 1) || String(a.kickoff).localeCompare(String(b.kickoff)));
-    const wk = order.find((g) => g.status !== 'final') || order[0];
+    // "This week" = the slate with games still to play. When every game is final, the finished slate moves to Past weeks
+    // (Zach, Nov 11 2026: last week's wins and losses were showing as the new picks).
+    const live = order.find((g) => g.status !== 'final');
+    const wk = live || [...order].sort((a, b) => String(b.kickoff).localeCompare(String(a.kickoff)))[0];
     const auto = slateFor(wk);
     const slate = SPORT === 'nba' ? 'turf' : slateChoice === 'auto' ? auto : slateChoice;
     $('hub').dataset.slate = slate;
@@ -1237,13 +1240,13 @@
     if (lit) { $('hub').style.setProperty('--glow-away', glow(lit.away)); $('hub').style.setProperty('--glow-home', glow(lit.home)); }
     Sky.calm = games.some((g) => g.status === 'live');
     Sky.set(['tnf', 'snf', 'mnf', 'sunday'].includes(slate) ? slate : null, lit && lit.away, lit && lit.home);
-    $('week-label').textContent = SPORT === 'nba' ? 'NBA · ' + (wk && wk.week ? wk.week : 'tonight') : (wk && wk.week ? 'NFL ' + wk.week + ' · ' : 'NFL · ') + SLATE_NAME[slate];
+    $('week-label').textContent = SPORT === 'nba' ? 'NBA · ' + (live && live.week ? live.week : 'next slate soon') : (live && live.week ? 'NFL ' + live.week + ' · ' + SLATE_NAME[slate] : 'NFL · next slate soon');
 
     const teams = []; order.filter((g) => g.status !== 'final').forEach((g) => { [g.away, g.home].forEach((t) => { if (t && !teams.includes(t)) teams.push(t); }); });
     fillFlowOnce(teams.length ? teams : order.flatMap((g) => [g.away, g.home]).filter(Boolean));
 
-    renderBest(wk && wk.week);
-    const curWeek = wk && wk.week;
+    const curWeek = live ? live.week : undefined;
+    renderBest(curWeek);
     $('hub').dataset.tab = tab;
     $('sync').textContent = SPORT === 'nba' && tab === 'combo' ? 'Over and under hit rates on FanDuel\'s combo lines: points + rebounds + assists, points + rebounds, points + assists.' : SPORT === 'nba' && ['td', 'recyd', 'rushyd', 'passyd'].includes(tab) ? 'Over and under hit rates on FanDuel\'s ' + { td: 'threes', recyd: 'points', rushyd: 'rebounds', passyd: 'assists' }[tab] + ' lines.' : tab === 'parlay' ? 'Search any player on this week\'s slate and add their lines to a parlay.' : tab === 'odds' ? 'FanDuel price when I posted each pick vs. the price at kickoff.' : tab === 'record' ? 'Every settled pick, losses included, and whether the model\'s hit rates hold up.' : tab === 'td' ? 'Our touchdown picks, ranked by the model\'s chance they score.' : tab === 'ml' ? 'Win, cover and over/under chances for every game, from our game sim.' : tab === 'recyd' ? 'Over and under hit rates on FanDuel\'s receiving yards lines.' : tab === 'rushyd' ? 'Over and under hit rates on FanDuel\'s rushing yards lines.' : tab === 'passyd' ? 'Over and under hit rates on FanDuel\'s passing yards lines.' : (DB ? 'Live · new picks pop in automatically' : 'Connecting to the picks board…');
     if (tab === 'parlay') { renderParlay($('games'), curWeek); return; }
